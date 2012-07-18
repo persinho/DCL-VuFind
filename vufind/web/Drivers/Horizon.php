@@ -107,16 +107,22 @@ class Horizon implements DriverInterface{
 			$itemSubfield       = $configArray['Catalog']['itemSubfield'];
 			$callnumberSubfield = $configArray['Catalog']['callnumberSubfield'];
 			$statusSubfield     = $configArray['Catalog']['statusSubfield'];
+			$firstItemWithSIPdata = null;
 			foreach ($items as $itemIndex => $item){
 				$barcode = trim($item->getSubfield($barcodeSubfield) != null ? $item->getSubfield($barcodeSubfield)->getData() : '');
 				//Check to see if we already have data for this barcode 
 				global $memcache;
-				$itemData = $memcache->get('item_data_' . $barcode);
+				if (isset($barcode) && strlen($barcode) > 0){ 
+					$itemData = $memcache->get("item_data_{$barcode}_{$forSummary}");
+				}else{
+					$itemData = false;
+				}
 				if ($itemData == false){
 					//No data exists
 				
 					$itemData = array();
-					$itemId = trim($item->getSubfield($itemSubfield) != null ? $item->getSubfield($itemSubfield)->getData() : '');
+					$itemId = trim($item->getSubfield($itemSubfield) != null ? $item->getSubfield($itemSubfield)->getData() : '');					
+
 					//Get the barcode from the horizon database
 					$itemData['locationCode'] = trim(strtolower( $item->getSubfield($locationSubfield) != null ? $item->getSubfield($locationSubfield)->getData() : '' ));
 					$itemData['location'] = $this->translateLocation($itemData['locationCode']);
@@ -136,11 +142,17 @@ class Horizon implements DriverInterface{
 						$itemStatusResult = $this->_query($query);
 						$itemsStatus = $this->_fetch_assoc($itemStatusResult);
 						if (isset($itemsStatus['item_status']) && strlen($itemsStatus['item_status']) > 0){
-							$itemData['status'] = $itemsStatus['item_status'];
+							$itemData['status'] = trim($itemsStatus['item_status']);
 							$timer->logTime("Got status from database item $itemIndex");
 						}
 					}
-					$itemData['availability'] = preg_match("/^({$configArray['Catalog']['availableStatuses']})$/i", $itemData['status']);
+					$availableRegex = "/^({$configArray['Catalog']['availableStatuses']})$/i";
+					if (preg_match($availableRegex, $itemData['status']) == 0){
+						$itemData['availability'] = false;
+					}else{
+						$itemData['availability'] = true;
+					}
+					
 					//Make the item holdable by default.  Then check rules to make it non-holdable.
 					$itemData['holdable'] = true;
 					//Make lucky day items not holdable
@@ -163,15 +175,24 @@ class Horizon implements DriverInterface{
 					$itemData['copy'] = $item->getSubfield('e') != null ? $item->getSubfield('e')->getData() : '';
 					$itemData['holdQueueLength'] = 0;
 					if (strlen($itemData['barcode']) > 0){
-						$itemSip2Data = $this->_loadItemSIP2Data($itemData['barcode'], $itemData['status']);
-						$itemData = array_merge($itemData, $itemSip2Data);
+						if ($forSummary && $firstItemWithSIPdata != null ){
+							$itemData = array_merge($firstItemWithSIPdata, $itemData);
+						}else{
+							$itemSip2Data = $this->_loadItemSIP2Data($itemData['barcode'], $itemData['status'], $forSummary);
+							if ($firstItemWithSIPdata == null){
+								$firstItemWithSIPdata = $itemSip2Data;
+							}
+							$itemData = array_merge($itemData, $itemSip2Data);
+						}
 					}
 
 					$itemData['collection'] = $this->translateCollection($item->getSubfield('c') != null ? $item->getSubfield('c')->getData() : '');
 
 					$itemData['statusfull'] = $this->translateStatus($itemData['status']);
 					//Suppress items based on status
-					$memcache->set('item_data_' . $barcode, $itemData, 0, $configArray['Caching']['item_data']);
+					if (isset($barcode) && strlen($barcode) > 0){ 
+						$memcache->set("item_data_{$barcode}_{$forSummary}", $itemData, 0, $configArray['Caching']['item_data']);
+					}
 				}
 				
 				$suppressItem = false;
@@ -216,10 +237,10 @@ class Horizon implements DriverInterface{
 		return $allItems;
 	}
 
-	public function getHoldings($idList)
+	public function getHoldings($idList, $record = null, $mysip = null, $forSummary = false)
 	{
 		foreach ($idList as $id) {
-			$holdings[] = $this->getHolding($id);
+			$holdings[] = $this->getHolding($id, $record, $mysip, $forSummary);
 		}
 		return $holdings;
 	}
@@ -231,7 +252,7 @@ class Horizon implements DriverInterface{
 
 	public function getStatuses($idList, $record = null, $mysip = null, $forSummary = false)
 	{
-		return getHoldings($idList, $record = null, $mysip = null, $forSummary = false);
+		return $this->getHoldings($idList, $record, $mysip, $forSummary);
 	}
 
 	public function getPurchaseHistory($id)
@@ -270,7 +291,7 @@ class Horizon implements DriverInterface{
 	public function getMyHolds($patron, $page = 1, $recordsPerPage = -1, $sortOption = 'title'){
 		global $configArray;
 		global $timer;
-
+		
 		if (is_object($patron)){
 			$patron = get_object_vars($patron);
 		}
@@ -398,7 +419,7 @@ class Horizon implements DriverInterface{
 		);
 	}
 	
-public function getMyHoldsViaHip($patron){
+	public function getMyHoldsViaHip($patron){
 		global $user;
 		global $configArray;
 		$logger = new Logger();
@@ -709,13 +730,33 @@ public function getMyHoldsViaDB($patron)
 		global $locationSingleton;
 		global $configArray;
 		global $memcache;
-		$summaryInformation = $memcache->get('holdings_summary_' . $id);
+		//Holdings summaries need to be cached based on the actual location since part of the information 
+		//includes local call numbers and statuses. 
+		$ipLocation = $locationSingleton->getPhysicalLocation();
+		$location = $ipLocation;
+		if (!isset($location) && $location == null){
+			$location = $locationSingleton->getUserHomeLocation();
+		}
+		if (isset($ipLocation)){
+			$ipLibrary = new Library();
+			$ipLibrary->libraryId = $ipLocation->getLibraryId;
+			if (!$ipLibrary->find(true)){
+				$ipLibrary = null;
+			}
+		}
+		else
+		{
+			$ipLibrary = null;
+		}
+		
+		if (!isset($location) && $location == null){
+			$locationId = -1;
+		}else{
+			$locationId = $location->locationId;
+		}
+		$summaryInformation = $memcache->get("holdings_summary_{$id}_{$locationId}" );
 		if ($summaryInformation == false){
 	
-			$location = $locationSingleton->getPhysicalLocation();
-			if (!isset($location) && $location == null){
-				$location = $locationSingleton->getUserHomeLocation();
-			}
 			$canShowHoldButton = true;
 			if ($library && $library->showHoldButton == 0){
 				$canShowHoldButton = false;
@@ -795,7 +836,7 @@ public function getMyHoldsViaDB($patron)
 					$allItemStatus = null;
 				}
 				if ($holding['availability'] == true){
-					if ($location && strcasecmp($holding['locationCode'], $location->code) == 0){
+					if ($ipLocation && strcasecmp($holding['locationCode'], $ipLocation->code) == 0){
 						$availableHere = true;
 					}
 					$numAvailableCopies++;
@@ -905,7 +946,7 @@ public function getMyHoldsViaDB($patron)
 					$isPurchaseLink = preg_match('/amazon|barnesandnoble/i', $linkURL);
 					if ($isImageLink == 0 && $isInternalLink == 0 && $isPurchaseLink == 0){
 						$linkTestText = $linkText . ' ' . $linkURL;
-						$isDownload = preg_match('/SpringerLink|NetLibrary|digital media)|Online version\.|ebrary|gutenberg|emedia2go/i', $linkTestText);
+						$isDownload = preg_match('/SpringerLink|NetLibrary|digital media|Online version\.|ebrary|gutenberg|emedia2go/i', $linkTestText);
 						if ($linkTestText == 'digital media') $linkText = 'OverDrive';
 						if (preg_match('/netlibrary/i', $linkURL)){
 							$isDownload = true;
@@ -952,7 +993,8 @@ public function getMyHoldsViaDB($patron)
 				$timer->logTime('Checked for downloadable link in 856 tag');
 			}
 	
-			if ($availableHere){
+			$showItsHere = ($ipLibrary == null) ? true : ($ipLibrary->showItsHere == 1);
+			if ($availableHere && $showItsHere){
 				$summaryInformation['status'] = "It's Here";
 				$summaryInformation['class'] = 'here';
 				unset($availableLocations[$location->code]);
@@ -997,7 +1039,7 @@ public function getMyHoldsViaDB($patron)
 			//That way it will jive with the actual full record display.
 			if ($allItemStatus != null && $allItemStatus != ''){
 				//Only override this for statuses that don't have special meaning
-				if ($summaryInformation['status'] != 'Marmot' && $summaryInformation['status'] != 'Available At'){
+				if ($summaryInformation['status'] != 'Marmot' && $summaryInformation['status'] != 'Available At' && $summaryInformation['status'] != "It's Here"){
 					$summaryInformation['status'] = $allItemStatus;
 				}
 			}
@@ -1015,7 +1057,7 @@ public function getMyHoldsViaDB($patron)
 			}
 			$timer->logTime('Finished building summary');
 			
-			$memcache->set('holdings_summary_' . $id, $summaryInformation, 0, $configArray['Caching']['holdings_summary']);
+			$memcache->set("holdings_summary_{$id}_{$locationId}", $summaryInformation, 0, $configArray['Caching']['holdings_summary']);
 		}
 		return $summaryInformation;
 	}
@@ -1052,10 +1094,12 @@ public function getMyHoldsViaDB($patron)
 		$timer->logTime('Connected to SIP2 server');
 
 		$items = array();
-		$count = 0;
-		foreach ($ids as $recordId){
-			$items[$count] = $this->getStatusSummary($recordId, null, $mysip);
-			$count++;
+		if (is_array($ids)){
+			$count = 0;
+			foreach ($ids as $recordId){
+				$items[$count] = $this->getStatusSummary($recordId, null, $mysip);
+				$count++;
+			}
 		}
 		return $items;
 	}
@@ -1407,7 +1451,7 @@ private $patronProfiles = array();
 						$homeLocationId = $location->locationId;
 					}
 					global $user;
-
+					
 					$profile= array(
             'lastname' => $result['variable']['DJ'][0],
             'firstname' => isset($result['variable']['DH'][0]) ? $result['variable']['DH'][0] : '',
@@ -1436,6 +1480,15 @@ private $patronProfiles = array();
 					$eContentDriver = new EContentDriver(); 
 					$eContentAccountSummary = $eContentDriver->getAccountSummary();
 					$profile = array_merge($profile, $eContentAccountSummary);
+					
+					//Get a count of the materials requests for the user
+					$materialsRequest = new MaterialsRequest();
+					$materialsRequest->createdBy = $user->id;
+					$statusQuery = new MaterialsRequestStatus();
+					$statusQuery->isOpen = 1;
+					$materialsRequest->joinAdd($statusQuery);
+					$materialsRequest->find();
+					$profile['numMaterialsRequests'] = $materialsRequest->N;
 				} else {
 					$profile = new PEAR_Error('patron_info_error_technical');
 				}
@@ -1567,7 +1620,7 @@ private $transactions = array();
 		global $memcache;
 		global $configArray;
 		global $timer;
-		$itemSip2Data = $memcache->get("item_sip2_data_$barcode");
+		$itemSip2Data = $memcache->get("item_sip2_data_{$barcode}");
 		if ($itemSip2Data == false){
 			//Check to see if the SIP2 information is already cached
 			if ($this->sipInitialized == false){
@@ -1625,7 +1678,7 @@ private $transactions = array();
 					}
 				}
 			}
-			$memcache->set("item_sip2_data_$barcode", $itemSip2Data, 0, $configArray['Caching']['item_sip2_data']);
+			$memcache->set("item_sip2_data_{$barcode}", $itemSip2Data, 0, $configArray['Caching']['item_sip2_data']);
 			$timer->logTime("Got due date and hold queue length from SIP 2 for barcode $barcode");
 		}
 		return $itemSip2Data;
@@ -1931,7 +1984,11 @@ public function renewItem($patronId, $itemId){
 					$hold_result['message'] = $result['variable']['AF'][0];
 					
 					//If the renew fails, check to see if we need to override the SIP port
-					if ($hold_result['result'] == false && $useAlternateSIP == false){
+					$alternatePortSet = false;
+					if (isset($configArray['SIP2']['alternate_port']) && strlen($configArray['SIP2']['alternate_port']) > 0 && $configArray['SIP2']['alternate_port'] != $configArray['SIP2']['port']){
+						$alternatePortSet = true;
+					}
+					if ($alternatePortSet && $hold_result['result'] == false && $useAlternateSIP == false){
 						//Can override the SIP port if there are sufficient copies on the shelf to cover any holds
 						
 						//Get the id for the item 
@@ -2568,7 +2625,7 @@ public function renewItem($patronId, $itemId){
 		$cookie = tempnam ("/tmp", "CURLCOOKIE");
 
 		//Start at My Account Page
-		$curl_url = $this->hipUrl . "/ipac20/ipac.jsp?profile={$configArray['Catalog']['hipProfile']}&menu=account";
+		$curl_url = $this->hipUrl . "/ipac20/ipac.jsp?profile={$this->hipProfile}&menu=account";
 		$curl_connection = curl_init($curl_url);
 		curl_setopt($curl_connection, CURLOPT_CONNECTTIMEOUT, 30);
 		curl_setopt($curl_connection, CURLOPT_HTTPHEADER, $header);
@@ -2600,7 +2657,7 @@ public function renewItem($patronId, $itemId){
       'button' => 'Login to Your Account',
       'login_prompt' => 'true',
       'menu' => 'account',
-      'profile' => $configArray['Catalog']['hipProfile'],
+      'profile' => $this->hipProfile,
       'ri' => '', 
       'sec1' => $user->cat_username,
       'sec2' => $user->cat_password,
@@ -2620,7 +2677,7 @@ public function renewItem($patronId, $itemId){
 			$post_data = array(
         'cancelhold' => 'Cancel Request',
         'menu' => 'account',
-        'profile' => $configArray['Catalog']['hipProfile'],
+        'profile' => $this->hipProfile,
         'session' => $sessionId,
         'submenu' => 'holds',
         'suspend_date' => '',
@@ -2666,7 +2723,7 @@ public function renewItem($patronId, $itemId){
 			$post_data = array(
         'changestatus' => 'Change Status',
         'menu' => 'account',
-        'profile' => $configArray['Catalog']['hipProfile'],
+        'profile' => $this->hipProfile,
         'select1' => $dateParts['month'],
         'select2' => $dateParts['day'],
         'select3' => $dateParts['year'] ,
@@ -2896,5 +2953,54 @@ private function parseSip2Fines($finesData){
 		}else{
 			return mssql_fetch_array($result_id);
 		}
+	}
+	
+/**
+	 * Email the user's pin number to the account on record if any exists.
+	 */
+	function emailPin($barcode){
+		global $configArray;
+		if ($this->useDb){
+			$sql = "SELECT name, borrower.borrower#, bbarcode, pin#, email_name, email_address from borrower inner join borrower_barcode on borrower.borrower# = borrower_barcode.borrower# inner join borrower_address on borrower.borrower# = borrower_address.borrower#  where bbarcode= '" . mysql_escape_string($barcode) . "'";
+
+			try {
+				$sqlStmt = $this->_query($sql);
+				$foundPatron = false;
+				while ($row = $this->_fetch_assoc($sqlStmt)) {
+					$pin = $row['pin#'];
+					$email = $row['email_address'];
+					$foundPatron = true;
+					break;
+				}
+
+				if ($foundPatron){
+					if (strlen($email) == 0){
+						return array('error' => 'Your account does not have an email address on record. Please visit your local library to retrieve your PIN number.');
+					}
+					require_once 'sys/Mailer.php';
+
+					$mailer = new VuFindMailer();
+					$subject = "PIN number for your Library Card";
+					$body = "The PIN number for your Library Card is $pin.  You may use this PIN number to login to your account.";
+					$mailer->send($email, $configArray['Site']['email'],$subject, $body);
+					return array(
+						'success' => true,
+						'pin' => $pin,
+						'email' => $email,
+					);
+				}else{
+					return array('error' => 'Sorry, we could not find an account with that barcode.');
+				}
+			} catch (PDOException $e) {
+				return array(
+					'error' => 'Unable to ready you PIN from the database.  Please try again later.'
+					);
+			}
+		}else{
+			$result = array(
+				'error' => 'This functionality requires a connection to the database.',
+			);
+		}
+		return $result;
 	}
 }

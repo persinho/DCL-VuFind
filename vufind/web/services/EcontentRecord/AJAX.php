@@ -1,6 +1,7 @@
 <?php
 require_once 'Action.php';
 require_once 'sys/Proxy_Request.php';
+require_once 'sys/eContent/EContentRecord.php';
 
 global $configArray;
 
@@ -11,12 +12,12 @@ class AJAX extends Action {
 
 	function launch() {
 		$method = $_GET['method'];
-		if (in_array($method, array('RateTitle', 'GetSeriesTitles', 'GetComments', 'checkPurchaseLinks', 'DeleteItem', 'SaveComment', 'CheckoutOverDriveItem', 'PlaceOverDriveHold', 'AddOverDriveRecordToWishList', 'RemoveOverDriveRecordFromWishList', 'CancelOverDriveHold'))){
+		if (in_array($method, array('RateTitle', 'GetSeriesTitles', 'GetComments', 'DeleteItem', 'SaveComment', 'CheckoutOverDriveItem', 'PlaceOverDriveHold', 'AddOverDriveRecordToWishList', 'RemoveOverDriveRecordFromWishList', 'CancelOverDriveHold'))){
 			header('Content-type: text/plain');
 			header('Cache-Control: no-cache, must-revalidate'); // HTTP/1.1
 			header('Expires: Mon, 26 Jul 1997 05:00:00 GMT'); // Date in the past
 			echo $this->$method();
-		}else if (in_array($method, array('GetGoDeeperData', 'AddItem', 'EditItem', 'GetOverDriveLoanPeriod'))){
+		}else if (in_array($method, array('GetGoDeeperData', 'AddItem', 'EditItem', 'GetOverDriveLoanPeriod', 'getPurchaseOptions'))){
 			header('Content-type: text/html');
 			header('Cache-Control: no-cache, must-revalidate'); // HTTP/1.1
 			header('Expires: Mon, 26 Jul 1997 05:00:00 GMT'); // Date in the past
@@ -41,6 +42,8 @@ class AJAX extends Action {
 	}
 	function GetHoldingsInfo(){
 		global $interface;
+		global $configArray;
+		$interface->assign('showOtherEditionsPopup', $configArray['Content']['showOtherEditionsPopup']);
 		$id = strip_tags($_REQUEST['id']);
 		$interface->assign('id', $id);
 		//Load holdings information from the driver
@@ -54,13 +57,27 @@ class AJAX extends Action {
 		
 		$holdings = $driver->getHolding($id);
 		$showEContentNotes = false;
+		$showSize = false;
 		foreach ($holdings as $holding){
 			if (strlen($holding->notes) > 0){
 				$showEContentNotes = true;
-			} 
+			}
+			if ($holding instanceof OverdriveItem){
+			if (is_numeric($holding->size)){
+					$showSize = true;
+				}
+			}else{
+				if ($holding->getSize() != 'Unknown'){
+					$showSize = true;
+				}
+			}
 		}
 		$interface->assign('source', $eContentRecord->source);
 		$interface->assign('showEContentNotes', $showEContentNotes);
+		$interface->assign('showSize', $showSize);
+		if ($eContentRecord->getIsbn() == null || strlen($eContentRecord->getIsbn()) == 0){
+			$interface->assign('showOtherEditionsPopup', false);
+		}
 		$interface->assign('holdings', $holdings);
 		//Load status summary
 		$result = $driver->getStatusSummary($id, $holdings);
@@ -182,9 +199,9 @@ class AJAX extends Action {
 		}
 
 		$interface->assign('commentList', $commentList['user']);
-		$userComments = $interface->fetch('EContentRecord/view-comments-list.tpl');
+		$userComments = $interface->fetch('Record/view-comments-list.tpl');
 		$interface->assign('staffCommentList', $commentList['staff']);
-		$staffComments = $interface->fetch('EContentRecord/view-staff-reviews-list.tpl');
+		$staffComments = $interface->fetch('Record/view-staff-reviews-list.tpl');
 
 		return json_encode(array(
 			'staffComments' => $staffComments,
@@ -350,6 +367,11 @@ class AJAX extends Action {
 		$overDriveDriver = new OverDriveDriver();
 		$loanPeriods = $overDriveDriver->getLoanPeriodsForFormat($formatId);
 		$interface->assign('loanPeriods', $loanPeriods);
+		
+		//Var for the IDCLREADER TEMPLATE
+		$interface->assign('ButtonHome',true);
+		$interface->assign('MobileTitle','{translate text="Loan Period"}');
+		
 		return $interface->fetch('EcontentRecord/ajax-loan-period.tpl');
 	}
 	
@@ -361,8 +383,7 @@ class AJAX extends Action {
 			$eContentRecord = new EContentRecord();
 			$eContentRecord->id = $_REQUEST['recordId'];
 			if ($eContentRecord->find(true)){
-				$sourceUrl = $eContentRecord->sourceUrl;
-				$overDriveId = substr($sourceUrl, -36);
+				$overDriveId = $eContentRecord->getOverDriveId();
 			}
 		}else{
 			$overDriveId = $_REQUEST['overDriveId'];
@@ -403,4 +424,125 @@ class AJAX extends Action {
 			return json_encode(array('result'=>false, 'message'=>'You must be logged in to cancel holds.'));
 		}
 	}
+	
+	function getPurchaseOptions(){
+		global $interface;
+		if (isset($_REQUEST['id'])){
+			$id = $_REQUEST['id'];
+			$interface->assign('id', $id);
+			$eContentRecord = new EContentRecord();
+			$eContentRecord->id = $id;
+			if ($eContentRecord->find(true)){
+				$purchaseLinks = array();
+				if ($eContentRecord->purchaseUrl != null){
+					$purchaseLinks[]  = array(
+						'link' => $eContentRecord->purchaseUrl,
+						'linkText' => 'Buy from ' . $eContentRecord->publisher,
+						'storeName' => $eContentRecord->publisher, 
+						'field856Index' => 1,
+					);
+				}
+				
+				if (count($purchaseLinks) > 0){
+					$interface->assign('purchaseLinks', $purchaseLinks);
+				}else{
+					$title = $eContentRecord->title;
+					$author = $eContentRecord->author;
+					require_once 'services/Record/Purchase.php';
+					$purchaseLinks = Purchase::getStoresForTitle($title, $author);
+					
+					if (count($purchaseLinks) > 0){
+						$interface->assign('purchaseLinks', $purchaseLinks);
+					}else{
+						$interface->assign('errors', array("Sorry we couldn't find any stores that offer this title."));
+					}
+				}
+			}else{
+				$errors = array("Could not load record for that id.");
+				$interface->assign('errors', $errors);
+			}
+		}else{
+			$errors = array("You must provide the id of the title to be purchased. ");
+			$interface->assign('errors', $errors);
+		}
+		
+		echo $interface->fetch('EcontentRecord/ajax-purchase-options.tpl');
+	}
+	
+	
+	function GetEnrichmentInfo(){
+		require_once 'Enrichment.php';
+		global $configArray;
+		$isbn = $_REQUEST['isbn'];
+		$upc = $_REQUEST['upc'];
+		$id = $_REQUEST['id'];
+		$enrichmentData = Enrichment::loadEnrichment($isbn);
+		global $interface;
+		$interface->assign('id', $id);
+		$interface->assign('enrichment', $enrichmentData);
+		$showSimilarTitles = false;
+		if (isset($enrichmentData['novelist']) && is_array($enrichmentData['novelist']['similarTitles']) && count($enrichmentData['novelist']['similarTitles']) > 0){
+			foreach ($enrichmentData['novelist']['similarTitles'] as $title){
+				if ($title['recordId'] != -1){
+					$showSimilarTitles = true;
+					break;
+				}
+			}
+		}
+		$interface->assign('showSimilarTitles', $showSimilarTitles);
+	
+		//Process series data
+		$titles = array();
+		if (!isset($enrichmentData['novelist']['series']) || count($enrichmentData['novelist']['series']) == 0){
+			$interface->assign('seriesInfo', json_encode(array('titles'=>$titles, 'currentIndex'=>0)));
+		}else{
+	
+			foreach ($enrichmentData['novelist']['series'] as $record){
+				$isbn = $record['isbn'];
+				if (strpos($isbn, ' ') > 0){
+					$isbn = substr($isbn, 0, strpos($isbn, ' '));
+				}
+				$cover = $configArray['Site']['coverUrl'] . "/bookcover.php?size=medium&isn=" . $isbn;
+				if (isset($record['id'])){
+					$cover .= "&id=" . $record['id'];
+				}
+				if (isset($record['upc'])){
+					$cover .= "&upc=" . $record['upc'];
+				}
+				if (isset($record['format_category'])){
+					$cover .= "&category=" . $record['format_category'][0];
+				}
+				$titles[] = array(
+						'id' => isset($record['id']) ? $record['id'] : '',
+						'image' => $cover,
+						'title' => $record['title'],
+						'author' => $record['author']
+				);
+			}
+	
+			foreach ($titles as $key => $rawData){
+				$formattedTitle = "<div id=\"scrollerTitleSeries{$key}\" class=\"scrollerTitle\">" .
+				'<a href="' . $configArray['Site']['path'] . "/Record/" . $rawData['id'] . '" id="descriptionTrigger' . $rawData['id'] . '">' .
+				"<img src=\"{$rawData['image']}\" class=\"scrollerTitleCover\" alt=\"{$rawData['title']} Cover\"/>" .
+				"</a></div>" .
+				"<div id='descriptionPlaceholder{$rawData['id']}' style='display:none'></div>";
+				$rawData['formattedTitle'] = $formattedTitle;
+				$titles[$key] = $rawData;
+			}
+			$seriesInfo = array('titles' => $titles, 'currentIndex' => $enrichmentData['novelist']['seriesDefaultIndex']);
+					$interface->assign('seriesInfo', json_encode($seriesInfo));
+		}
+	
+		//Load go deeper options
+				require_once('Drivers/marmot_inc/GoDeeperData.php');
+				$goDeeperOptions = GoDeeperData::getGoDeeperOptions($isbn, $upc);
+				if (count($goDeeperOptions['options']) == 0){
+				$interface->assign('showGoDeeper', false);
+				}else{
+				$interface->assign('showGoDeeper', true);
+				}
+	
+				return $interface->fetch('EcontentRecord/ajax-enrichment.tpl');
+	}	
+	
 }

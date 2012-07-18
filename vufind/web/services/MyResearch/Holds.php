@@ -56,7 +56,7 @@ class Holds extends MyResearch
 				$type = 'update';
 				$freeze = '';
 			}
-			$result = $this->catalog->driver->updateHoldDetailed($requestId, $user->password, $type, $title, $xnum, $cancelId, $locationId, $freeze);
+			$result = $this->catalog->driver->updateHoldDetailed($requestId, $user->password, $type, $title, null, $cancelId, $locationId, $freeze);
 
 			//Redirect back here without the extra parameters.
 			header("Location: " . $configArray['Site']['url'] . '/MyResearch/Holds?accountSort=' . ($selectedSortOption = isset($_REQUEST['accountSort']) ? $_REQUEST['accountSort'] : 'title'));
@@ -81,41 +81,19 @@ class Holds extends MyResearch
 
 		$profile = $this->catalog->getMyProfile($user);
 
-		$today = time();
-		if ($this->catalog->checkFunction('getLibraryHours')){
-			$todaysLibraryHours = $this->catalog->getLibraryHours($profile['homeLocationId'], $today);
-			if (isset($todaysLibraryHours) && is_array($todaysLibraryHours)){
-				if (isset($todaysLibraryHours['closed']) && $todaysLibraryHours['closed'] == true){
-					//Library is closed now
-					$nextDay = time() + (24 * 60 * 60);
-					$nextDayHours = $this->catalog->getLibraryHours($profile->homeLocationId,  $nextDay);
-					while (isset($todaysLibraryHours['closed']) && $todaysLibraryHours['closed'] == true){
-						$nextDay += (24 * 60 * 60);
-						$nextDayHours = $this->catalog->getLibraryHours($profile->homeLocationId,  $nextDay);
-					}
-		
-					$nextDayOfWeek = strftime ('%a', $nextDay);
-					$libraryHoursMessage = "The library is closed today. It will reopen on $nextDayOfWeek from {$nextDayHours['openFormatted']} to {$nextDayHours['closeFormatted']}";
-				}else{
-					//Library is open
-					$currentHour = strftime ('%H', $today);
-					if ($currentHour < $todaysLibraryHours['open']){
-						$libraryHoursMessage = "The library will be open today from " . $todaysLibraryHours['openFormatted'] . " to " . $todaysLibraryHours['closeFormatted'] . ".";
-					}else if ($currentHour > $todaysLibraryHours['close']){
-						$tomorrowsLibraryHours = $this->catalog->getLibraryHours($profile['homeLocationId'],  time() + (24 * 60 * 60));
-						$libraryHoursMessage = "The library will be open tomorrow from " . $tomorrowsLibraryHours['openFormatted'] . " to " . $tomorrowsLibraryHours['closeFormatted'] . ".";
-					}else{
-						$libraryHoursMessage = "The library is open today from " . $todaysLibraryHours['openFormatted'] . " to " . $todaysLibraryHours['closeFormatted'] . ".";
-					}
-				}
-			}else{
-				$libraryHoursMessage = null;
-			}
-		}else{
-			$libraryHoursMessage = null;
-		}
+		$libraryHoursMessage = Location::getLibraryHoursMessage($profile['homeLocationId']);
 		$interface->assign('libraryHoursMessage', $libraryHoursMessage);
 
+		$ils = $configArray['Catalog']['ils'];
+		$allowChangeLocation = ($ils == 'Millennium');
+		$interface->assign('allowChangeLocation', $allowChangeLocation);
+		$showPlacedColumn = ($ils == 'Horizon');
+		$interface->assign('showPlacedColumn', $showPlacedColumn);
+		$showDateWhenSuspending = ($ils == 'Horizon');
+		$interface->assign('showDateWhenSuspending', $showDateWhenSuspending);
+		$showPosition = ($ils == 'Horizon');
+		$interface->assign('showPosition', $showPosition);
+		
 		// Get My Transactions
 		if ($this->catalog->status) {
 			if ($user->cat_username) {
@@ -152,12 +130,18 @@ class Holds extends MyResearch
 						foreach ($result['holds'] as $sectionKey => $sectionData) {
 							if ($sectionKey == 'unavailable'){
 								$link = $_SERVER['REQUEST_URI'];
-								$link = preg_replace("/[&?]page=\d+/", "", $link);
+								if (preg_match('/[&?]page=/', $link)){
+									$link = preg_replace("/page=\\d+/", "page=%d", $link);
+								}else if (strpos($link, "?") > 0){
+									$link .= "&page=%d";
+								}else{
+									$link .= "?page=%d";
+								}
 								if ($recordsPerPage != '-1'){
 									$options = array('totalItems' => $result['numUnavailableHolds'],
 								                 'fileName'   => $link,
 								                 'perPage'    => $recordsPerPage,
-								                 'append'    => true,
+								                 'append'    => false,
 									);
 									$pager = new VuFindPager($options);
 									$interface->assign('pageLinks', $pager->getLinks());
@@ -178,7 +162,7 @@ class Holds extends MyResearch
 							else {
 								$exportType = "unavailable";
 							}
-							$this->exportToExcel($result, $exportType);
+							$this->exportToExcel($result['holds'], $exportType, $showDateWhenSuspending);
 						}
 
 					} else {
@@ -188,16 +172,6 @@ class Holds extends MyResearch
 			}
 		}
 		
-		$ils = $configArray['Catalog']['ils'];
-		$allowChangeLocation = ($ils == 'Millennium');
-		$interface->assign('allowChangeLocation', $allowChangeLocation);
-		$showPlacedColumn = ($ils == 'Horizon');
-		$interface->assign('showPlacedColumn', $showPlacedColumn);
-		$showDateWhenSuspending = ($ils == 'Horizon');
-		$interface->assign('showDateWhenSuspending', $showDateWhenSuspending);
-		$showPosition = ($ils == 'Horizon');
-		$interface->assign('showPosition', $showPosition);
-		
 		//print_r($patron);
 		$interface->assign('patron',$patron);
 		$interface->setTemplate('holds.tpl');
@@ -205,7 +179,7 @@ class Holds extends MyResearch
 		$interface->display('layout.tpl');
 	}
 
-	public function exportToExcel($result, $exportType) {
+	public function exportToExcel($result, $exportType, $showDateWhenSuspending) {
 		//PHPEXCEL
 		// Create new PHPExcel object
 		$objPHPExcel = new PHPExcel();
@@ -263,7 +237,11 @@ class Holds extends MyResearch
 			}else{
 				$authorCell = '';
 			}
-			$formatString = implode(', ', $row['format']);
+			if (is_array($row['format'])){
+				$formatString = implode(', ', $row['format']);
+			}else{
+				$formatString = $row['format'];
+			}
 
 			//Grab the available time
 			if (isset($row['availableTime'])) {
@@ -276,31 +254,29 @@ class Holds extends MyResearch
 				$availableValue = "Now";
 			}
 
-			$expireDate = strip_tags($row['expiredate']);
-
 			if ($exportType == "available") {
 				$objPHPExcel->setActiveSheetIndex(0)
 				->setCellValue('A'.$a, $titleCell)
 				->setCellValue('B'.$a, $authorCell)
 				->setCellValue('C'.$a, $formatString)
-				->setCellValue('D'.$a, $row['createdate'])
+				->setCellValue('D'.$a, isset($row['createTime']) ? date('M d, Y', $row['createTime']) : '')
 				->setCellValue('E'.$a, $row['location'])
 				->setCellValue('F'.$a, isset($row['availableTime']) ? date('M d, Y', strtotime($row['availableTime'])) : 'Now')
-				->setCellValue('G'.$a, date('M d, Y', strtotime($row['expiredate'])));
+				->setCellValue('G'.$a, date('M d, Y', $row['expire']));
 			} else {
 				$statusCell = $row['status'];
-				if ($row['frozen']){
-					$statusCell .= " until " . date('M d, Y', strtotime($row['reactivatedate']));
+				if ($row['frozen'] && $showDateWhenSuspending){
+					$statusCell .= " until " . date('M d, Y', strtotime($row['reactivateTime']));
 				}
 				$objPHPExcel->setActiveSheetIndex(0)
 				->setCellValue('A'.$a, $titleCell)
 				->setCellValue('B'.$a, $authorCell)
 				->setCellValue('C'.$a, $formatString)
-				->setCellValue('D'.$a, $row['createdate'])
+				->setCellValue('D'.$a, isset($row['createTime']) ? date('M d, Y', $row['createTime']) : '')
 				->setCellValue('E'.$a, $row['location'])
 				->setCellValue('F'.$a, $row['position'])
 				->setCellValue('G'.$a, $statusCell)
-				->setCellValue('H'.$a, date('M d, Y', strtotime($row['expiredate'])));
+				->setCellValue('H'.$a, date('M d, Y', $row['expireTime']));
 			}
 			$a++;
 		}

@@ -232,6 +232,12 @@ class Results extends Action {
 
 		$numProspectorTitlesToLoad = 0;
 		if ($searchObject->getResultTotal() < 1) {
+			
+			//Var for the IDCLREADER TEMPLATE
+			$interface->assign('ButtonBack',true);
+			$interface->assign('ButtonHome',true);
+			$interface->assign('MobileTitle','No Results Found');
+			
 			// No record found
 			$interface->setTemplate('list-none.tpl');
 			$interface->assign('recordCount', 0);
@@ -261,12 +267,12 @@ class Results extends Action {
 			$record = reset($recordSet);
 			if ($record['recordtype'] == 'list'){
 				$listId = substr($record['id'], 4);
-				header("Location: " . $configArray['Site']['url'] . "/MyResearch/MyList/{$listId}");
+				header("Location: " . $interface->getUrl() . "/MyResearch/MyList/{$listId}");
 			}elseif ($record['recordtype'] == 'econtentRecord'){
 				$shortId = str_replace('econtentRecord', '', $record['id']);
-				header("Location: " . $configArray['Site']['url'] . "/EcontentRecord/$shortId/Home");
+				header("Location: " . $interface->getUrl() . "/EcontentRecord/$shortId/Home");
 			}else{
-				header("Location: " . $configArray['Site']['url'] . "/Record/{$record['id']}/Home");
+				header("Location: " . $interface->getUrl() . "/Record/{$record['id']}/Home");
 			}
 			
 		} else {
@@ -309,6 +315,12 @@ class Results extends Action {
 			$interface->assign('sitepath', $configArray['Site']['path']);
 			$interface->assign('subpage', 'Search/list-list.tpl');
 			$interface->setTemplate('list.tpl');
+			
+			//Var for the IDCLREADER TEMPLATE
+			$interface->assign('ButtonBack',true);
+			$interface->assign('ButtonHome',true);
+			$interface->assign('MobileTitle','Search Results');
+			
 
 			// Process Paging
 			$link = $searchObject->renderLinkPageTemplate();

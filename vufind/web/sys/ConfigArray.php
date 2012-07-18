@@ -34,7 +34,7 @@ function getExtraConfigArrayFile($name)
 	$filename = isset($configArray['Extra_Config'][$name]) ? $configArray['Extra_Config'][$name] : $name . '.ini';
 
 	//Check to see if there is a domain name based subfolder for he configuration
-	$servername = $_SERVER['SERVER_NAME'];
+	global $servername;
 	if (file_exists("../../sites/$servername/conf/$filename")){
 		// Return the file path (note that all ini files are in the conf/ directory)
 		return "../../sites/$servername/conf/$filename";
@@ -106,7 +106,14 @@ function ini_merge($config_ini, $custom_ini)
 {
 	foreach ($custom_ini as $k => $v) {
 		if (is_array($v)) {
-			$config_ini[$k] = ini_merge($config_ini[$k], $custom_ini[$k]);
+			if (isset($config_ini[$k]))
+			{
+				$config_ini[$k] = ini_merge($config_ini[$k], $custom_ini[$k]);
+			}
+			else
+			{
+				$config_ini[$k] = $custom_ini[$k];
+			}
 		} else {
 			$config_ini[$k] = $v;
 		}
@@ -123,16 +130,17 @@ function ini_merge($config_ini, $custom_ini)
 function readConfig()
 {
 	//Read default configuration file
-	$configFile = '../../sites/default/conf/config.ini';
+	$configFile = dirname(__FILE__)."/../../../sites/default/conf/config.ini";
 	$mainArray = parse_ini_file($configFile, true);
 	
 	global $servername;
-	$server = $_SERVER['SERVER_NAME'];
+	$serverUrl = $_SERVER['SERVER_NAME'];
+	$server = $serverUrl;
 	$serverParts = explode('.', $server);
 	$servername = 'default';
 	while (count($serverParts) > 0){
 		$tmpServername = join('.', $serverParts);
-		$configFile = "../../sites/$tmpServername/conf/config.ini";
+		$configFile = dirname(__FILE__)."/../../../sites/$tmpServername/conf/config.ini";
 		if (file_exists($configFile)){
 			$serverArray = parse_ini_file($configFile, true);
 			$mainArray = ini_merge($mainArray, $serverArray);
@@ -143,6 +151,13 @@ function readConfig()
 	
 	if ($mainArray == false){
 		echo("Unable to parse configuration file $configFile, please check syntax");
+	}
+	//If we are accessing the site via a subdomain, need to preserve the subdomain
+	if (isset($_SERVER['HTTPS']))
+	{
+		$mainArray['Site']['url'] = "https://" . $serverUrl;
+	}else{
+		$mainArray['Site']['url'] = "http://" . $serverUrl;
 	}
 	
 	if (isset($mainArray['Extra_Config']) &&

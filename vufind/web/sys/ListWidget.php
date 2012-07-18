@@ -17,6 +17,8 @@ class ListWidget extends DB_DataObject
 	public $fullListLink;
 	public $customCss;
 	public $listDisplayType;
+	public $showMultipleTitles;
+	public $autoRotate;
 	
 	private $lists; //varchar(500)
 	/* Static get */
@@ -61,6 +63,20 @@ class ListWidget extends DB_DataObject
         'type' => 'checkbox',
         'label' => 'Should the description pop-up be shown when hovering over titles?',
         'storeDb' => true,
+        'default' => true,
+      ),
+      'showMultipleTitles' => array(
+        'property' => 'showMultipleTitles',
+        'type' => 'checkbox',
+        'label' => 'Should multiple titles by shown in in the widget or should only one title be shown at a time?',
+        'storeDb' => true,
+        'default' => true,
+      ),
+      'autoRotate' => array(
+        'property' => 'autoRotate',
+        'type' => 'checkbox',
+        'label' => 'Should the widget automatically rotate between titles?',
+        'storeDb' => true,
       ),
       'onSelectCallback' => array(
         'property'=>'onSelectCallback', 
@@ -102,6 +118,7 @@ class ListWidget extends DB_DataObject
         'sortable' => true,
         'storeDb' => true, 
         'serverValidation' => 'validateLists',
+      	'editLink' => 'ListWidgetsListsLinks'
       ),
 		);
 		foreach ($structure as $fieldName => $field){

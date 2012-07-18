@@ -42,16 +42,41 @@ class GetCard extends Action
 			$interface->assign('registrationResult', $registrationResult);
 			$interface->setTemplate('getcardresult.tpl');
 		}else{
-			$selfRegCityStates = parse_ini_file('conf/selfRegCityState.ini', true);
+			global $servername;
+			if (file_exists("../../sites/{$servername}/conf/selfRegCityState.ini")){
+				$selfRegCityStates = parse_ini_file("../../sites/{$servername}/conf/selfRegCityState.ini", true);
+			}elseif (file_exists("../../sites/default/conf/selfRegCityState.ini")){
+				$selfRegCityStates = parse_ini_file("../../sites/default/conf/selfRegCityState.ini", true);
+			}else{
+				$selfRegCityStates = null;
+			}
 			$interface->assign('selfRegCityStates', $selfRegCityStates);
 			
-			$selfRegLanguages = parse_ini_file('conf/selfRegLanguage.ini', true);
+			if (file_exists("../../sites/{$servername}/conf/selfRegLanguage.ini")){
+				$selfRegLanguages = parse_ini_file("../../sites/{$servername}/conf/selfRegLanguage.ini", true);
+			}elseif (file_exists("../../sites/default/conf/selfRegLanguage.ini")){
+				$selfRegLanguages = parse_ini_file("../../sites/default/conf/selfRegLanguage.ini", true);
+			}else{
+				$selfRegLanguages = null;
+			}
 			$interface->assign('selfRegLanguages', $selfRegLanguages);
 			
-			$selfRegLocations = parse_ini_file('conf/selfRegLocation.ini', true);
+			if (file_exists("../../sites/{$servername}/conf/selfRegLocation.ini")){
+				$selfRegLocations = parse_ini_file("../../sites/{$servername}/conf/selfRegLocation.ini", true);
+			}elseif (file_exists("../../sites/default/conf/default/conf/selfRegLocation.ini")){
+				$selfRegLocations = parse_ini_file("../../sites/default/conf/selfRegLocation.ini", true);
+			}else{
+				$selfRegLocations = null;
+			}
 			$interface->assign('selfRegLocations', $selfRegLocations);
 			
-			$selfRegPhoneType = parse_ini_file('conf/selfRegPhoneType.ini', true);
+			if (file_exists("../../sites/{$servername}/conf/selfRegPhoneType.ini")){
+				$selfRegPhoneType = parse_ini_file("../../sites/{$servername}/conf/selfRegPhoneType.ini", true);
+			}elseif (file_exists("../../sites/default/conf/selfRegPhoneType.ini")){
+				$selfRegPhoneType = parse_ini_file("../../sites/default/conf/selfRegPhoneType.ini", true);
+			}else{
+				$selfRegPhoneType = null;
+			}
 			$interface->assign('selfRegPhoneType', $selfRegPhoneType);
 			
 			$interface->setTemplate('getcard.tpl');

@@ -23,8 +23,6 @@ class Novelist{
 		
 		$enrichment = $memcache->get("novelist_enrichment_$isbn");
 		if ($enrichment == false){
-			
-			//$requestUrl = "http://eit.ebscohost.com/Services/NovelistSelect.asmx/SeriesTitles?prof=$profile&pwd=$pwd&authType=&ipprof=&isbn={$this->isbn}";
 			$requestUrl = "http://eit.ebscohost.com/Services/NovelistSelect.asmx/AllContent?prof=$profile&pwd=$pwd&authType=&ipprof=&isbn={$isbn}";
 	
 			try{
@@ -166,7 +164,7 @@ class Novelist{
 			}
 			$titleList[] = array(
                 'title' => $ownedRecord['title'],
-                'title_short' => $ownedRecord['title_short'],
+                'title_short' => (isset($ownedRecord['title_short']) ? $ownedRecord['title_short'] : ""),
                 'author' => $ownedRecord['author'],
                 'publicationDate' => (string)$item->PublicationDate,
                 'isbn' => $isbn13,
@@ -179,7 +177,7 @@ class Novelist{
                 'shortId' => substr($ownedRecord['id'], 1),
                 'format_category' => $ownedRecord['format_category'],
                 'format' => $ownedRecord['format'],
-                'series' => $series,
+                'series' => (isset($series) ? $series : ''),
 			);
 			$titlesOwned++;
 		}else{

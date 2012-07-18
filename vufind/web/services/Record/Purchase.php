@@ -32,6 +32,7 @@ class Purchase extends Action {
 		$recordId = $_REQUEST['id'];
 		$ipAddress = $_SERVER['REMOTE_ADDR'];
 		$field856Index = isset($_REQUEST['index']) ? $_REQUEST['index'] : null;
+		$libraryName = $configArray['Site']['title'];
 
 		// Setup Search Engine Connection
 		$class = $configArray['Index']['engine'];
@@ -50,18 +51,18 @@ class Purchase extends Action {
 
 		$titleTerm = $record["title"];
 		$title = str_replace("/", "", $titleTerm);
+		$authorTerm = $record["auth_author"];
+		$author = str_replace("/", "", $authorTerm);
 
 		if ($field856Index == null){
-			switch ($store){
-				case "Tattered Cover":
-					$purchaseLinkUrl = "http://www.tatteredcover.com/search/apachesolr_search/" . urlencode($title) . "?source=dcl";
-					break;
-				case "Barnes and Noble":
-					$purchaseLinkUrl = "http://www.barnesandnoble.com/s/?title=" . urlencode($title) . "&source=dcl";
-					break;
-				case "Amazon":
-					$purchaseLinkUrl = "http://www.amazon.com/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=" . urlencode($title) . "&source=dcl";
-					break;
+			// Find the store in the database
+			require_once 'Drivers/marmot_inc/BookStore.php';
+			$storeDbObj = new BookStore();
+			$storeDbObj->storeName = $store;
+			$storeDbObj->find();
+			if ($storeDbObj->N > 0){
+				$storeDbObj->fetch();
+				$purchaseLinkUrl = self::getPurchaseLinkForTitle($storeDbObj->link, $title, $author, $libraryName);
 			}
 		}else{
 			// Process MARC Data
@@ -72,7 +73,7 @@ class Purchase extends Action {
 			} else {
 				PEAR::raiseError(new PEAR_Error("Failed to load the MAC record for this title."));
 			}
-			
+				
 			$linkFields =$marcRecord->getFields('856') ;
 			if ($linkFields){
 				$cur856Index = 0;
@@ -109,4 +110,55 @@ class Purchase extends Action {
 			
 	}
 
+	static function getStoresForTitle($title, $author){
+		
+		$purchaseLinks = array();
+		
+		$stores = Library::getBookStores();
+		foreach ($stores as $store) {
+			$url = self::getPurchaseLinkForTitle($store->link, $title, $author);
+			$input = file_get_contents($url);
+			$regexp = $store->resultRegEx;
+			if(!preg_match($regexp, $input)) {
+				global $configArray;
+				$uploadedImage = $configArray['Site']['local'] . '/files/original/' . $store->image;
+				$uploadedImageURL = $configArray['Site']['path'] . '/files/original/' . $store->image;
+				$purchaseLinks[] = array(
+					'link' => $url,
+					'linkText' => $store->linkText,
+					'image' => (file_exists($uploadedImage) ? $uploadedImageURL : $store->image),
+					'storeName' => $store->storeName,
+				);
+			}
+		}
+		return $purchaseLinks;
+	}
+
+	private static function getPurchaseLinkForTitle($baseURL, $title, $author, $libraryName='') {
+		$title = str_replace("/", "", $title);
+		if (strpos($title, ':') > 0){
+			$title = trim(substr($title, 0, strpos($title, ':')));
+		}
+		if (strpos($author, ',') > 0){
+			$author = trim(substr($author, 0, strpos($author, ',')));
+		}
+		$url = $baseURL;
+		// substitute the library name place holder with the real library name
+		if (strpos($url, '{libraryName}') !== false) {
+			$url = str_replace('{libraryName}', urlencode($libraryName), $url);
+		}
+		// substitute title place holder with real title
+		if (strpos($url, '{title}') !== false) {
+			$url = str_replace('{title}', urlencode($title), $url);
+		} else {
+			$url .= urlencode($title);
+		}
+		// substitute author place holder with real title
+		if (strpos($url, '{author}') !== false) {
+			$url = str_replace('{author}', urlencode($author), $url);
+		} else {
+			$url .= '+' . urlencode($author);
+		}
+		return $url;
+	}
 }

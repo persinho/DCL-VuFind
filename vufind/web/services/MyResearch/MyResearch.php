@@ -84,7 +84,7 @@ class MyResearch extends Action
 		}
 
 		//This code is also in Search/History since that page displays in the My Account menu as well.
-		//It is also in MyList.php
+		//It is also in MyList.php and Admin.php
 		if ($user !== false){
 			$interface->assign('user', $user);
 			// Get My Profile
@@ -96,12 +96,13 @@ class MyResearch extends Action
 					}
 
 					$profile = $this->catalog->getMyProfile($patron);
+					//$logger = new Logger();
+					//$logger->log("Patron profile phone number in MyResearch = " . $profile['phone'], PEAR_LOG_INFO);
 					if (!PEAR::isError($profile)) {
 						$interface->assign('profile', $profile);
 					}
 				}
 			}
-
 			//Figure out if we should show a link to classic opac to pay holds.
 			$ecommerceLink = $configArray['Site']['ecommerceLink'];
 			$homeLibrary = Library::getLibraryForLocation($user->homeLocationId);

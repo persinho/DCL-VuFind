@@ -7,7 +7,7 @@ abstract class SolrDataObject extends DB_DataObject{
 	 * Return an array describing the structure of the object fields, etc.
 	 */
 	abstract function getObjectStructure();
-
+	
 	function update(){
 		return $this->updateDetailed(true);
 	}
@@ -92,9 +92,11 @@ abstract class SolrDataObject extends DB_DataObject{
 		return true;
 	}
 
-	function saveToSolr(){
+	protected $_quickReindex = false;
+	function saveToSolr($quick = false){
 		global $timer;
 		global $configArray;
+		$this->_quickReindex = $quick;
 		$host = $configArray[$this->getConfigSection()]['url'];
 		$logger = new Logger();
 
@@ -134,13 +136,15 @@ abstract class SolrDataObject extends DB_DataObject{
 		foreach ($cores as $corename){
 			$index = new Solr($host, $corename);
 
-			$xml = $index->getSaveXML($doc, true);
+			$xml = $index->getSaveXML($doc, !$this->_quickReindex, $this->_quickReindex);
 			//$logger->log('XML ' . print_r($xml, true), PEAR_LOG_INFO);
 			$timer->logTime('Created XML to save to the main index');
 			if ($index->saveRecord($xml)) {
-				//$result = $index->commit();
-				//$logger->log($xml, PEAR_LOG_INFO);
-				//$logger->log("Result saving to $corename index " . print_r($result, true), PEAR_LOG_INFO);
+				if (!$this->_quickReindex){
+					$result = $index->commit();
+					//$logger->log($xml, PEAR_LOG_INFO);
+					//$logger->log("Result saving to $corename index " . print_r($result, true), PEAR_LOG_INFO);
+				}
 			} else {
 				return new PEAR_Error("Could not save to $corename");
 			}

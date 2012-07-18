@@ -46,10 +46,11 @@
 					{/if}
 					<div class='holdSectionTitle'>{if $sectionKey=='available'}Arrived at pickup location{else}Requested items not yet available:{/if}</div>
 						<div class='holdSectionBody'>
+							{if $sectionKey=='available' && $libraryHoursMessage}
+								<div class='libraryHours'>{$libraryHoursMessage}</div>
+							{/if}
 							{if is_array($recordList.$sectionKey) && count($recordList.$sectionKey) > 0}
-								{if $sectionKey=='available' && $libraryHoursMessage}
-									<div class='libraryHours'>{$libraryHoursMessage}</div>
-								{/if}
+								
 								{* Form to update holds at one time *}
 								<div id='holdsWithSelected{$sectionKey}Top' class='holdsWithSelected{$sectionKey}'>
 									<form id='withSelectedHoldsFormTop{$sectionKey}' action='{$fullPath}'>
@@ -84,10 +85,10 @@
 										Records Per Page:
 										<select id="pagesize" class="pagesize" onchange="changePageSize()">
 											<option value="10" {if $recordsPerPage == 10}selected="selected"{/if}>10</option>
-											<option value="25" {if $recordsPerPage == 25}selected="selected"{/if}>20</option>
-											<option value="50" {if $recordsPerPage == 50}selected="selected"{/if}>30</option>
-											<option value="75" {if $recordsPerPage == 75}selected="selected"{/if}>40</option>
-											<option value="100" {if $recordsPerPage == 100}selected="selected"{/if}>50</option>
+											<option value="25" {if $recordsPerPage == 25}selected="selected"{/if}>25</option>
+											<option value="50" {if $recordsPerPage == 50}selected="selected"{/if}>50</option>
+											<option value="75" {if $recordsPerPage == 75}selected="selected"{/if}>75</option>
+											<option value="100" {if $recordsPerPage == 100}selected="selected"{/if}>100</option>
 										</select>
 										</span>
 									{/if}
@@ -159,7 +160,13 @@
 									
 												<div class="myAccountTitleDetails">
 													<div class="resultItemLine1">
-														<a href="{$url}/Record/{$record.recordId|escape:"url"}?searchId={$searchId}&amp;recordIndex={$recordIndex}&amp;page={$page}" class="title">{if !$record.title|regex_replace:"/(\/|:)$/":""}{translate text='Title not available'}{else}{$record.title|regex_replace:"/(\/|:)$/":""|truncate:180:"..."|highlight:$lookfor}{/if}</a>
+														{if $record.recordId}
+														<a href="{$url}/Record/{$record.recordId|escape:"url"}?searchId={$searchId}&amp;recordIndex={$recordIndex}&amp;page={$page}" class="title">
+														{/if}
+														{if !$record.title|regex_replace:"/(\/|:)$/":""}{translate text='Title not available'}{else}{$record.title|regex_replace:"/(\/|:)$/":""|truncate:180:"..."|highlight:$lookfor}{/if}
+														{if $record.recordId}
+														</a>
+														{/if}
 														{if $record.title2}
 															<div class="searchResultSectionInfo">
 																{$record.title2|regex_replace:"/(\/|:)$/":""|truncate:180:"..."|highlight:$lookfor}
@@ -246,20 +253,20 @@
 											{/if}
 										
 											<td class="myAccountCell">
-												<div id ="searchStars{$record.recordId|escape}" class="resultActions">
-													<div class="rate{$record.recordId|escape} stat">
+												<div id ="searchStars{$record.shortId|escape}" class="resultActions">
+													<div class="rate{$record.shortId|escape} stat">
 														<div class="statVal">
 															<span class="ui-rater">
 																<span class="ui-rater-starsOff" style="width:90px;"><span class="ui-rater-starsOn" style="width:0px"></span></span>
 																(<span class="ui-rater-rateCount-{$record.recordId|escape} ui-rater-rateCount">0</span>)
 															</span>
 														</div>
-															<div id="saveLink{$record.recordId|escape}">
+															<div id="saveLink{$record.shortId|escape}">
 																{if $showFavorites == 1} 
 																<a href="{$url}/Resource/Save?id={$record.recordId|escape:"url"}&amp;source=VuFind" style="padding-left:8px;" onclick="getSaveToListForm('{$record.recordId|escape}', 'VuFind'); return false;">{translate text='Add to'} <span class='myListLabel'>MyLIST</span></a>
 																{/if}
 																{if $user}
-																	<div id="lists{$record.recordId|escape}"></div>
+																	<div id="lists{$record.shortId|escape}"></div>
 															<script type="text/javascript">
 																getSaveStatuses('{$record.recordId|escape:"javascript"}');
 															</script>
@@ -269,7 +276,7 @@
 														<script type="text/javascript">
 															$(
 																 function() {literal} { {/literal}
-																		 $('.rate{$record.recordId|escape}').rater({literal}{ {/literal}module: 'Record', recordId: '{$record.recordId}',	rating:0.0, postHref: '{$url}/Record/{$record.recordId|escape}/AJAX?method=RateTitle'{literal} } {/literal});
+																		 $('.rate{$record.shortId|escape}').rater({literal}{ {/literal}module: 'Record', recordId: '{$record.recordId}',	rating:0.0, postHref: '{$url}/Record/{$record.recordId|escape}/AJAX?method=RateTitle'{literal} } {/literal});
 																 {literal} } {/literal}
 															);
 														</script>
@@ -315,7 +322,7 @@
 												<input type="submit" class="button" name="thawSelected" value="Activate Selected" title="Activate the hold to allow the hold to be filled again." onclick="return thawSelectedHolds();"/>
 											{/if}
 											<input type="submit" class="button" name="cancelSelected" value="Cancel Selected" onclick="return cancelSelectedHolds();"/>
-											{if $allowChangeLocation}
+											{if $allowChangeLocation && $sectionKey=='unavailable'}
 												<div id='holdsUpdateBranchSelction'>
 													Change Pickup Location for Selected Items to: 
 													{html_options name="withSelectedLocation" options=$pickupLocations selected=$resource.currentPickupId}

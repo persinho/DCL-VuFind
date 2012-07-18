@@ -6,7 +6,7 @@ class FileSession extends SessionInterface {
 
     static private $path;
     
-    public function init($lt) {
+    public function init($lt,$rememberMeLifetime) {
         global $configArray;
         
         // Set defaults if nothing set in config file.
@@ -22,7 +22,7 @@ class FileSession extends SessionInterface {
         }
                         
         // Call standard session initialization from this point.
-        parent::init($lt);
+        parent::init($lt,$rememberMeLifetime);
     }
 
     static public function read($sess_id)

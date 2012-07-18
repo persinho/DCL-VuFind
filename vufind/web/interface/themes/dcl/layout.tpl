@@ -3,6 +3,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
     <title>{$pageTitle|truncate:64:"..."}</title>
+    <link rel="shortcut icon" href="{$path}/interface/themes/dcl/images/favicon.ico" type="image/x-icon" />
     {if $addHeader}{$addHeader}{/if}
     <link rel="search" type="application/opensearchdescription+xml" title="Library Catalog Search" href="{$url}/Search/OpenSearch?method=describe" />
     {if $consolidateCss}

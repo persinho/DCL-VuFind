@@ -143,6 +143,9 @@ class Solr implements IndexEngine {
 		if (file_exists("../../sites/$servername/conf/searchspecs.yaml")){
 			// Return the file path (note that all ini files are in the conf/ directory)
 			$this->searchSpecsFile = "../../sites/$servername/conf/searchspecs.yaml";
+		}elseif(file_exists("../../sites/default/conf/searchspecs.yaml")){
+			// Return the file path (note that all ini files are in the conf/ directory)
+			$this->searchSpecsFile = "../../sites/default/conf/searchspecs.yaml";
 		}
 			
 		$this->host = $host . '/' . $index;
@@ -832,7 +835,7 @@ class Solr implements IndexEngine {
 		switch ($sortField) {
 			case 'year':
 			case 'publishDate':
-				$sortField = 'publishDate';
+				$sortField = 'publishDateSort';
 				$defaultSortDirection = 'desc';
 				break;
 			case 'author':
@@ -975,8 +978,8 @@ class Solr implements IndexEngine {
 			$options['fl'] = '*,score';
 		}
 
-		//Apply automatic boosting (only to biblio queries)
-		if (preg_match('/.*biblio.*/', $this->host)){
+		//Apply automatic boosting (only to biblio and econtent queries)
+		if (preg_match('/.*(biblio|econtent).*/i', $this->host)){
 			//unset($options['qt']); //Force the query to never use dismax handling
 			$boostFactors = array();
 			global $language;

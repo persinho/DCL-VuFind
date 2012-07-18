@@ -23,6 +23,7 @@ require_once 'Drivers/EContentDriver.php';
 require_once 'Action.php';
 
 class Checkout extends Action{
+	
 	function launch(){
 		global $interface;
 		global $configArray;
@@ -81,7 +82,7 @@ class Checkout extends Action{
 		if (isset($return) && $showMessage) {
 			$hold_message_data = array(
               'successful' => $return['result'] ? 'all' : 'none',
-              'error' => $return['error'],
+              'error' => isset($return['error']) ? $return['error'] : null,
               'titles' => array(
 			$return,
 			),
@@ -103,6 +104,12 @@ class Checkout extends Action{
 				header("Location: " . $configArray['Site']['url'] . '/MyResearch/EContentCheckedOut');
 			}
 		} else {
+			//Var for the IDCLREADER TEMPLATE
+			$interface->assign('ButtonBack',true);
+			$interface->assign('ButtonHome',true);
+			$interface->assign('MobileTitle','Login to your account');
+			
+			
 			$logger->log('eContent checkout finished, do not need to show a message', PEAR_LOG_INFO);
 			$interface->setPageTitle('Checkout Item');
 			$interface->assign('subTemplate', 'checkout.tpl');

@@ -6,9 +6,9 @@
 {literal}$(document).ready(function(){{/literal}
 	GetEContentHoldingsInfo('{$id|escape:"url"}');
 	{if $isbn || $upc}
-    GetEnrichmentInfo('{$id|escape:"url"}', '{$isbn10|escape:"url"}', '{$upc|escape:"url"}');
+    GetEnrichmentInfoEContent('{$id|escape:"url"}', '0439136350', '{$upc|escape:"url"}');
   {/if}
-  {if $isbn}
+  {if $isbn && ($showComments || $showAmazonReviews || $showStandardReviews)}
     GetReviewInfo('{$id|escape:"url"}', '{$isbn|escape:"url"}');
   {/if}
   	{if $enablePospectorIntegration == 1}
@@ -16,9 +16,6 @@
 	{/if}
   {if $user}
 	  redrawSaveStatus();
-	{/if}
-	{if !$purchaseLinks}
-		checkPurchaseLinks('{$id|escape:"url"}');
 	{/if}
 	{if (isset($title)) }
 	  //alert("{$title}");
@@ -189,7 +186,7 @@ function redrawSaveStatus() {literal}{{/literal}
       <div id="similarAuthorPlaceholder"></div>
     </div>
     
-    {if is_array($editions)}
+    {if is_array($editions) && !$showOtherEditionsPopup}
     <div class="sidegroup" id="otherEditionsSidegroup">
       <h4>{translate text="Other Editions"}</h4>
         {foreach from=$editions item=edition}
@@ -297,14 +294,22 @@ function redrawSaveStatus() {literal}{{/literal}
 	  </div>
 	  
 	  {* Access online link *}
+	  {*
 	  <div class='accessOnlineLink' id="accessOnline{$id|escape:"url"}" style="display:none">
 	    <a href="{$path}/EcontentRecord/{$id|escape:"url"}/Home?detail=holdingstab#detailsTab"><img src="{$path}/interface/themes/default/images/access_online.png" alt="Access Online"/></a>
 	  </div>
+	  *}
 	  
 	  {* Add to Wish List *}
 	  <div class='addToWishListLink' id="addToWishList{$id|escape:"url"}" style="display:none">
 	    <a href="{$path}/EcontentRecord/{$id|escape:"url"}/AddToWishList"><img src="{$path}/interface/themes/default/images/add_to_wishlist.png" alt="Add To Wish List"/></a>
 	  </div>
+	  
+	  {if $showOtherEditionsPopup}
+		<div id="otherEditionCopies">
+			<div style="font-weight:bold"><a href="#" onclick="loadOtherEditionSummaries('{$id}', true)">{translate text="Other Formats and Languages"}</a></div>
+		</div>
+		{/if}
 
       {if $goldRushLink}
       <div class ="titledetails">
@@ -516,19 +521,18 @@ function redrawSaveStatus() {literal}{{/literal}
     <div id="moredetails-tabs">
       {* Define tabs for the display *}
       <ul>
-        <li><a href="#holdingstab">Copies</a></li>
-        {if $notes}
-          <li><a href="#notestab">Notes</a></li>
-        {/if}
-        {if $showAmazonReviews || $showStandardReviews}
-          <li><a href="#reviewtab">Editorial Reviews</a></li>
-        {/if}
-        <li><a href="#staffReviewtab">Staff Reviews</a></li>
-        <li><a href="#readertab">Reader Reviews</a></li>
-        <li><a href="#citetab">Citation</a></li>
-        {if $eContentRecord->marcRecord}
-        	<li><a href="#stafftab">Staff View</a></li>
-        {/if}
+        <li><a href="#holdingstab">{translate text="Copies"}</a></li>
+				{if $notes}
+					<li><a href="#notestab">{translate text="Notes"}</a></li>
+				{/if}
+				{if $showAmazonReviews || $showStandardReviews || $showComments}
+					<li><a href="#reviewtab">{translate text="Reviews"}</a></li>
+				{/if}
+				{if $showComments}
+				<li><a href="#readertab">{translate text="Reader Comments"}</a></li>
+				{/if}
+				<li><a href="#citetab">{translate text="Citation"}</a></li>
+				<li><a href="#stafftab">{translate text="Staff View"}</a></li>
       </ul>
       
       {* Display the content of individual tabs *}
@@ -542,16 +546,20 @@ function redrawSaveStatus() {literal}{{/literal}
         </div>
       {/if}
       
-      
-      {if $showAmazonReviews || $showStandardReviews}
-		<div id="reviewtab">
-		  <div id='reviewPlaceholder'></div>
-		</div>
-      {/if}
-   
-      <div id = "staffReviewtab" >
-        {include file="Record/view-staff-reviews.tpl"}
-      </div>
+      {if $showAmazonReviews || $showStandardReviews || $showComments}
+			<div id="reviewtab">
+				{if $showComments}
+				<div id = "staffReviewtab" >
+				{include file="Record/view-staff-reviews.tpl"}
+				</div>
+				{/if}
+				 
+				{if $showAmazonReviews || $showStandardReviews}
+				<h4>Professional Reviews</h4>
+				<div id='reviewPlaceholder'></div>
+				{/if}
+			</div>
+			{/if}
       
       {if $showComments == 1}
         <div id = "readertab" >
@@ -563,6 +571,21 @@ function redrawSaveStatus() {literal}{{/literal}
             {include file="EcontentRecord/submit-comments.tpl"}
           </div>
           {include file="EcontentRecord/view-comments.tpl"}
+          
+					{* Chili Fresh Reviews *}
+					{if $chiliFreshAccount && ($isbn || $upc || $issn)}
+						<h4>Chili Fresh Reviews</h4>
+						{if $isbn}
+						<div class="chili_review" id="isbn_{$isbn10}"></div>
+						<div id="chili_review_{$isbn10}" style="display:none" align="center" width="100%"></div>
+						{elseif $upc}
+						<div class="chili_review_{$upc}" id="isbn"></div>
+						<div id="chili_review_{$upc}" style="display:none" align="center" width="100%"></div>
+						{elseif $issn}
+						<div class="chili_review_{$issn}" id="isbn"></div>
+						<div id="chili_review_{$issn}" style="display:none" align="center" width="100%"></div>
+						{/if}
+					{/if}
         </div>
       {/if}
       
@@ -572,19 +595,15 @@ function redrawSaveStatus() {literal}{{/literal}
       
       <div id = "holdingstab">
       	<div id="holdingsPlaceholder">Loading...</div>
-        {if $purchaseLinks}
-          <div id="purchaseTitleLinks">
-          <h3>Get a copy for yourself</h3>
-          {foreach from=$purchaseLinks item=purchaseLink}
-            <div class='purchaseTitle button'><a href="/EcontentRecord/{$id}/Purchase?store={$purchaseLink.storeName|escape:"url"}" target="_blank">{$purchaseLink.linkText}</a></div>
-          {/foreach}
-          </div>
-        {else}
-         <div id="purchaseTitleLinks">
-        <div id="purchaseLinkButtons"></div>
-        </div>
-        {/if}
-        {if $eContentRecord->sourceUrl}
+      	{if $showOtherEditionsPopup}
+				<div id="otherEditionCopies">
+					<div style="font-weight:bold"><a href="#" onclick="loadOtherEditionSummaries('{$id}', true)">{translate text="Other Formats and Languages"}</a></div>
+				</div>
+				{/if}
+        {if $enablePurchaseLinks == 1}
+					<div class='purchaseTitle button'><a href="#" onclick="return showEcontentPurchaseOptions('{$id}');">{translate text='Buy a Copy'}</a></div>
+				{/if}
+       {if $eContentRecord->sourceUrl}
       	<div id="econtentSource">
       		<a href="{$eContentRecord->sourceUrl}">Access original files</a>
       	</div>
@@ -593,9 +612,7 @@ function redrawSaveStatus() {literal}{{/literal}
       
       {if $eContentRecord->marcRecord}
         <div id = "stafftab">
-        	<pre style="overflow:auto">{strip}
-	        {$eContentRecord->marcRecord}
-	        {/strip}</pre>
+        	{include file=$staffDetails}
 	      </div>
       {/if}
     </div> {* End of tabs*}

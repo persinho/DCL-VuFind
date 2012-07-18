@@ -8,7 +8,7 @@
 	{if $isbn || $upc}
     GetEnrichmentInfo('{$id|escape:"url"}', '{$isbn10|escape:"url"}', '{$upc|escape:"url"}');
   {/if}
-  {if $isbn}
+  {if $isbn && ($showComments || $showAmazonReviews || $showStandardReviews)}
     GetReviewInfo('{$id|escape:"url"}', '{$isbn|escape:"url"}');
   {/if}
   {if $enablePospectorIntegration == 1}
@@ -16,9 +16,6 @@
 	{/if}
 	{if $user}
 	  redrawSaveStatus();
-	{/if}
-	{if !$purchaseLinks}
-		checkPurchaseLinks('{$id|escape:"url"}');
 	{/if}
 	{if (isset($title)) }
 	  alert("{$title}");
@@ -186,12 +183,16 @@ function redrawSaveStatus() {literal}{{/literal}
       <div id="similarAuthorPlaceholder"></div>
     </div>
     
-    {if is_array($editions)}
+    {if is_array($editions) && !$showOtherEditionsPopup}
     <div class="sidegroup" id="otherEditionsSidegroup">
       <h4>{translate text="Other Editions"}</h4>
         {foreach from=$editions item=edition}
           <div class="sidebarLabel">
-            <a href="{$path}/Record/{$edition.id|escape:"url"}">{$edition.title|regex_replace:"/(\/|:)$/":""|escape}</a>
+          	{if $edition.recordtype == 'econtentRecord'}
+          	<a href="{$path}/EcontentRecord/{$edition.id|replace:'econtentRecord':''|escape:"url"}">{$edition.title|regex_replace:"/(\/|:)$/":""|escape}</a>
+          	{else}
+          	<a href="{$path}/Record/{$edition.id|escape:"url"}">{$edition.title|regex_replace:"/(\/|:)$/":""|escape}</a>
+          	{/if}
           </div>
           <div class="sidebarValue">
           {if is_array($edition.format)}
@@ -207,12 +208,7 @@ function redrawSaveStatus() {literal}{{/literal}
         {/foreach}
     </div>
     {/if}
-    
-    {if $linkToAmazon == 1 && $isbn}
-    <div class="titledetails">
-      <a href="http://amazon.com/dp/{$isbn|@formatISBN}" class='amazonLink'> {translate text = "View on Amazon"}</a>
-    </div>
-    {/if}
+
   </div> {* End sidebar *}
   
   <div id="main-content" class="full-result-content">
@@ -270,6 +266,11 @@ function redrawSaveStatus() {literal}{{/literal}
 	  <div class='requestThisLink' id="placeHold{$id|escape:"url"}" style="display:none">
 	    <a href="{$path}/Record/{$id|escape:"url"}/Hold"><img src="{$path}/interface/themes/default/images/place_hold.png" alt="Place Hold"/></a>
 	  </div>
+	  {if $showOtherEditionsPopup}
+		<div id="otherEditionCopies">
+			<div style="font-weight:bold"><a href="#" onclick="loadOtherEditionSummaries('{$id}', false)">{translate text="Other Formats and Languages"}</a></div>
+		</div>
+		{/if}
     
       {if $goldRushLink}
       <div class ="titledetails">
@@ -435,17 +436,18 @@ function redrawSaveStatus() {literal}{{/literal}
     <div id="moredetails-tabs">
       {* Define tabs for the display *}
       <ul>
-        <li><a href="#holdingstab">Copies</a></li>
-        {if $notes}
-          <li><a href="#notestab">Notes</a></li>
-        {/if}
-        {if $showAmazonReviews || $showStandardReviews}
-          <li><a href="#reviewtab">Editorial Reviews</a></li>
-        {/if}
-        <li><a href="#staffReviewtab">Staff Reviews</a></li>
-        <li><a href="#readertab">Reader Reviews</a></li>
-        <li><a href="#citetab">Citation</a></li>
-        <li><a href="#stafftab">Staff View</a></li>
+        <li><a href="#holdingstab">{translate text="Copies"}</a></li>
+				{if $notes}
+					<li><a href="#notestab">{translate text="Notes"}</a></li>
+				{/if}
+				{if $showAmazonReviews || $showStandardReviews || $showComments}
+					<li><a href="#reviewtab">{translate text="Reviews"}</a></li>
+				{/if}
+				{if $showComments}
+				<li><a href="#readertab">{translate text="Reader Comments"}</a></li>
+				{/if}
+				<li><a href="#citetab">{translate text="Citation"}</a></li>
+				<li><a href="#stafftab">{translate text="Staff View"}</a></li>
       </ul>
       
       {* Display the content of individual tabs *}
@@ -459,16 +461,20 @@ function redrawSaveStatus() {literal}{{/literal}
         </div>
       {/if}
       
-      
-      {if $showAmazonReviews || $showStandardReviews}
-		<div id="reviewtab">
-		  <div id='reviewPlaceholder'></div>
-		</div>
-      {/if}
-   
-      <div id = "staffReviewtab" >
-        {include file="$module/view-staff-reviews.tpl"}
-      </div>
+      {if $showAmazonReviews || $showStandardReviews || $showComments}
+      <div id="reviewtab">
+      	{if $showComments}
+				<div id = "staffReviewtab" >
+				{include file="$module/view-staff-reviews.tpl"}
+				</div>
+				{/if}
+				 
+				{if $showAmazonReviews || $showStandardReviews}
+				<h4>Editorial Reviews</h4>
+				<div id='reviewPlaceholder'></div>
+				{/if}
+			</div>
+			{/if}
       
       {if $showComments == 1}
         <div id = "readertab" >
@@ -480,6 +486,21 @@ function redrawSaveStatus() {literal}{{/literal}
             {include file="$module/submit-comments.tpl"}
           </div>
           {include file="$module/view-comments.tpl"}
+          
+					{* Chili Fresh Reviews *}
+					{if $chiliFreshAccount && ($isbn || $upc || $issn)}
+						<h4>Chili Fresh Reviews</h4>
+						{if $isbn}
+						<div class="chili_review" id="isbn_{$isbn10}"></div>
+						<div id="chili_review_{$isbn10}" style="display:none" align="center" width="100%"></div>
+						{elseif $upc}
+						<div class="chili_review_{$upc}" id="isbn"></div>
+						<div id="chili_review_{$upc}" style="display:none" align="center" width="100%"></div>
+						{elseif $issn}
+						<div class="chili_review_{$issn}" id="isbn"></div>
+						<div id="chili_review_{$issn}" style="display:none" align="center" width="100%"></div>
+						{/if}
+					{/if}
         </div>
       {/if}
       
@@ -502,22 +523,17 @@ function redrawSaveStatus() {literal}{{/literal}
 		{/if}
 		{/foreach}
 		{/if}
-        <div id="holdingsPlaceholder"></div>
-        {if $purchaseLinks}
-          <div id="purchaseTitleLinks">
-          <h3>Get a copy for yourself</h3>
-          {foreach from=$purchaseLinks item=purchaseLink}
-            <div class='purchaseTitle button'><a href="/Record/{$id}/Purchase?store={$purchaseLink.storeName|escape:"url"}{if $purchaseLink.field856Index}&index={$purchaseLink.field856Index}{/if}" target="_blank">{$purchaseLink.linkText}</a></div>
-          {/foreach}
-          </div>
-        {else}
-         <div id="purchaseTitleLinks">
-        <div id="purchaseLinkButtons"></div>
-        </div>
-        {/if}
-        
-      </div>
-    </div> {* End of tabs*}
+		<div id="holdingsPlaceholder"></div>
+			{if $showOtherEditionsPopup}
+			<div id="otherEditionCopies">
+				<div style="font-weight:bold"><a href="#" onclick="loadOtherEditionSummaries('{$id}', false)">{translate text="Other Formats and Languages"}</a></div>
+			</div>
+			{/if}
+			{if $enablePurchaseLinks == 1 && !$purchaseLinks}
+				<div class='purchaseTitle button'><a href="#" onclick="return showPurchaseOptions('{$id}');">{translate text='Buy a Copy'}</a></div>
+			{/if}
+		</div>
+	</div> {* End of tabs*}
             
   </div>
     
@@ -533,5 +549,12 @@ StrandsTrack.push({
 });
 </script>
 {/literal}
-
-     
+{if $chiliFreshAccount}
+<!-- ChiliFresh code part 3 start -->
+<input type="hidden" id="chilifresh_type" name="chilifresh_profile" value="default" />
+<input type="hidden" id="chilifresh_type" name="chilifresh_location" value="pa" />
+<input type="hidden" id="chilifresh_version" name="chilifresh_version" value="onsite_v1" />
+<input type="hidden" id="chilifresh_account" name="chilifresh_account" value="{$chiliFreshAccount}" />
+<script type="text/javascript" src="http://chilifresh.com/on-site/js/vufind.js" />
+<!-- ChiliFresh code part 3 end -->
+{/if}

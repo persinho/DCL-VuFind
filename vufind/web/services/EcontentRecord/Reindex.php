@@ -29,11 +29,12 @@ class Reindex extends Action{
 		global $user;
 
 		$recordId = $_REQUEST['id'];
+		$quick = isset($_REQUEST['quick']) ? true : false;
 		$eContentRecord = new EContentRecord();
 		$eContentRecord->id = $recordId;
 		if ($eContentRecord->find(true)){
-			$ret = $eContentRecord->saveToSolr();
-			if ($ret){
+			$ret = $eContentRecord->saveToSolr($quick);
+      if ($ret){
 				echo(json_encode(array("success" => true)));
 			}else{
 				echo(json_encode(array("success" => false, "error" => "Could not update solr")));

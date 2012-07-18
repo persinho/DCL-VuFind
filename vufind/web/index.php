@@ -41,39 +41,56 @@ $timeout = isset($configArray['Caching']['memcache_connection_timeout']) ? $conf
 
 // Connect to Memcache:
 $memcache = new Memcache();
-if (!$memcache->connect($host, $port, $timeout)) {
+if (!$memcache->pconnect($host, $port, $timeout)) {
 	PEAR::raiseError(new PEAR_Error("Could not connect to Memcache (host = {$host}, port = {$port})."));
 }
 $timer->logTime("Initialize Memcache");
 
 //Cleanup method information so module, action, and id are set properly.
 //This ensures that we don't have to change the http-vufind.conf file when new types are added.
-$dataObjects = array('Record', 'EcontentRecord', 'EContent', 'EditorialReview', 'Person');
-$dataObjectsStr = implode('|', $dataObjects);
+//$dataObjects = array('Record', 'EcontentRecord', 'EContent', 'EditorialReview', 'Person');
+//$dataObjectsStr = implode('|', $dataObjects);
 //Deal with old path based urls by removing the leading path.
 $requestURI = $_SERVER['REQUEST_URI'];
-$requestURI = preg_replace("/^vufind\//", "", $requestURI);
-if (preg_match("/($dataObjectsStr)\/((?:\.b)?\d+x?)\/([^\/?]+)/", $requestURI, $matches)){
+$requestURI = preg_replace("/^\/?vufind\//", "", $requestURI);
+if (preg_match("/(MyResearch|MyAccount)\/([^\/?]+)\/([^\/?]+)(\?.+)?/", $requestURI, $matches)){
+	$_GET['module'] = $matches[1];
+	$_GET['id'] = $matches[3];
+	$_GET['action'] = $matches[2];
+	$_REQUEST['module'] = $matches[1];
+	$_REQUEST['id'] = $matches[3];
+	$_REQUEST['action'] = $matches[2];
+}elseif (preg_match("/(MyResearch|MyAccount)\/([^\/?]+)(\?.+)?/", $requestURI, $matches)){
+	$_GET['module'] = $matches[1];
+	$_GET['action'] = $matches[2];
+	$_REQUEST['id'] = '';
+	$_REQUEST['module'] = $matches[1];
+	$_REQUEST['action'] = $matches[2];
+	$_REQUEST['id'] = '';
+}elseif (preg_match("/([^\/?]+)\/((?:\.b)?\d+x?)\/([^\/?]+)/", $requestURI, $matches)){
 	$_GET['module'] = $matches[1];
 	$_GET['id'] = $matches[2];
 	$_GET['action'] = $matches[3];
 	$_REQUEST['module'] = $matches[1];
 	$_REQUEST['id'] = $matches[2];
 	$_REQUEST['action'] = $matches[3];
-}elseif (preg_match("/($dataObjectsStr)\/((?:\.b)?\d+x?)/", $requestURI, $matches)){
+}elseif (preg_match("/([^\/?]+)\/((?:\.b)?\d+x?)/", $requestURI, $matches)){
 	$_GET['module'] = $matches[1];
 	$_GET['id'] = $matches[2];
 	$_GET['action'] = 'Home';
 	$_REQUEST['module'] = $matches[1];
 	$_REQUEST['id'] = $matches[2];
 	$_REQUEST['action'] = 'Home';
-}elseif (preg_match("/($dataObjectsStr)\/([^\/?]+)/", $requestURI, $matches)){
+}elseif (preg_match("/([^\/?]+)\/([^\/?]+)/", $requestURI, $matches)){
 	$_GET['module'] = $matches[1];
 	$_GET['action'] = $matches[2];
 	$_REQUEST['module'] = $matches[1];
 	$_REQUEST['action'] = $matches[2];
 }
-
+if (isset($_GET['module']) && $_GET['module'] == 'MyAccount'){
+	$_GET['module'] = 'MyResearch';
+	$_REQUEST['module'] = 'MyResearch';
+}
 // Try to set the locale to UTF-8, but fail back to the exact string from the config
 // file if this doesn't work -- different systems may vary in their behavior here.
 setlocale(LC_MONETARY, array($configArray['Site']['locale'] . ".UTF-8",
@@ -129,6 +146,7 @@ $timer->logTime('Setup database connection');
 // Initiate Session State
 $session_type = $configArray['Session']['type'];
 $session_lifetime = $configArray['Session']['lifetime'];
+$session_rememberMeLifetime = $configArray['Session']['rememberMeLifetime'];
 register_shutdown_function('session_write_close');
 if (isset($configArray['Site']['cookie_domain'])){
 	session_set_cookie_params(0, '/', $configArray['Site']['cookie_domain']);
@@ -136,7 +154,7 @@ if (isset($configArray['Site']['cookie_domain'])){
 require_once 'sys/' . $session_type . '.php';
 if (class_exists($session_type)) {
 	$session = new $session_type();
-	$session->init($session_lifetime);
+	$session->init($session_lifetime, $session_rememberMeLifetime);
 }
 $timer->logTime('Session initialization ' . $session_type);
 
@@ -194,6 +212,11 @@ if ($locationSingleton->getActiveLocation() != null){
 }else{
 	$interface->assign('librarySystemName', 'Marmot');
 }
+if ($locationSingleton->getIPLocation() != null){
+	$interface->assign('inLibrary', true);
+}else{
+	$interface->assign('inLibrary', false);
+}
 
 $productionServer = $configArray['Site']['isProduction'];
 $interface->assign('productionServer', $productionServer);
@@ -242,6 +265,7 @@ if (isset($configArray['Strands']) && isset($configArray['Strands']['APID']) && 
 }else{
 	$interface->assign('showStrands', false);
 }
+$interface->assign('showPackagingDetailsReport', isset($configArray['EContent']['showPackagingDetailsReport']) && $configArray['EContent']['showPackagingDetailsReport']);
 $interface->assign('showFines', $configArray['Catalog']['showFines']);
 
 // Check system availability
@@ -343,7 +367,6 @@ if ($user) {
 	//Create a cookie for the user's home branch so we can sort holdings even if they logout.
 	//Cookie expires in 1 week.
 	setcookie('home_location', $user->homeLocationId, time()+60*60*24*7, '/');
-
 } else if (// Special case for Shibboleth:
 ($configArray['Authentication']['method'] == 'Shibboleth' && $module == 'MyResearch') ||
 // Default case for all other authentication methods:
@@ -398,25 +421,6 @@ if ($module == null && $action == null){
 	$module = $configArray['Site']['defaultModule'];
 	$action = 'Home';
 
-}elseif ($module == 'MyResearch' && ($action == null || $action == 'Home')){
-	//We are going to the "main page of My Research"
-	//Be smart about this depending on the user's information.
-	if ($user && !$interface->isMobile()){
-		// Connect to Database
-		$catalog = new CatalogConnection($configArray['Catalog']['driver']);
-		$patron = $catalog->patronLogin($user->cat_username, $user->cat_password);
-		$profile = $catalog->getMyProfile($patron);
-		if ($profile['numCheckedOut'] > 0){
-			$action ='CheckedOut';
-		}elseif ($profile['numHolds'] > 0){
-			$action ='Holds';
-		}else{
-			$action ='Favorites';
-		}
-	}else{
-		//Go to the login page which is the home page
-		$action = 'Home';
-	}
 }elseif ($action == null){
 	$action = 'Home';
 }
@@ -448,6 +452,17 @@ if (isset($_REQUEST['basicType'])){
 	$interface->assign('basicSearchIndex', $_REQUEST['basicType']);
 }else{
 	$interface->assign('basicSearchIndex', 'Keyword');
+}
+$interface->assign('curFormatCategory', 'Everything');
+if (isset($_REQUEST['filter'])){
+	foreach ($_REQUEST['filter'] as $curFilter){
+		$filterInfo = split(":", $curFilter);
+		if ($filterInfo[0] == 'format_category'){
+			$curFormatCategory = str_replace('"', '', $filterInfo[1]);
+			$interface->assign('curFormatCategory', $curFormatCategory);
+			break;
+		}
+	}
 }
 if (isset($_REQUEST['genealogyType'])){
 	$interface->assign('genealogySearchIndex', $_REQUEST['genealogyType']);
@@ -522,7 +537,7 @@ if ($action == "AJAX" || $action == "JSON"){
 		if (isset($library) && $library != false && $library->useHomeLinkInBreadcrumbs){
 			$interface->assign('homeBreadcrumbLink', $library->homeLink);
 		}else{
-			$interface->assign('homeBreadcrumbLink', $configArray['Site']['url']);
+			$interface->assign('homeBreadcrumbLink', $interface->getUrl());
 		}
 	}
 	//Load user list for book bag
@@ -543,17 +558,16 @@ if ($action == "AJAX" || $action == "JSON"){
 $ipLocation = $locationSingleton->getIPLocation();
 $ipId = $locationSingleton->getIPid();
 
-if (!is_null($ipLocation) && $user){
+if (!is_null($ipLocation) && $ipLocation != false && $user){
 	$interface->assign('onInternalIP', true);
-	if ($user->bypassAutoLogout == 1){
+	if (isset($user->bypassAutoLogout) && $user->bypassAutoLogout == 1){
 		$interface->assign('includeAutoLogoutCode', false);
 	}else{
 		$includeAutoLogoutCode = true;
-		if ($user){
-			//Get the PType for the user
-			require_once('Drivers/Marmot.php');
-			$marmotDriver = new Marmot();
-			$userIsStaff = $marmotDriver->isUserStaff();
+		//Get the PType for the user
+		$catalog = new CatalogConnection($configArray['Catalog']['driver']);
+		if ($catalog->checkFunction('isUserStaff')){
+			$userIsStaff = $catalog->isUserStaff();
 			$interface->assign('userIsStaff', $userIsStaff);
 			if ($userIsStaff){
 				//Check to see if the user has overridden the auto logout code.
@@ -562,6 +576,7 @@ if (!is_null($ipLocation) && $user){
 				}
 			}
 		}
+		
 		$interface->assign('includeAutoLogoutCode', $includeAutoLogoutCode);
 	}
 }else{
@@ -826,7 +841,7 @@ function checkAvailabilityMode() {
 function updateConfigForScoping($configArray) {
 	global $timer;
 	//Get the subdomain for the request
-	$serverName = $_SERVER['SERVER_NAME'];
+	global $servername;
 
 	//Default dynamic logos
 	$configArray['Site']['smallLogo'] = "/interface/themes/{$configArray['Site']['theme']}/images/logo_small.png";
@@ -834,8 +849,8 @@ function updateConfigForScoping($configArray) {
 
 	//split the servername based on
 	$subdomain = null;
-	if(strpos($serverName, '.')){
-		$serverComponents = explode('.', $serverName);
+	if(strpos($_SERVER['SERVER_NAME'], '.')){
+		$serverComponents = explode('.', $_SERVER['SERVER_NAME']);
 		if (count($serverComponents) >= 3){
 			//URL is probably of the form subdomain.marmot.org or subdomain.opac.marmot.org
 			$subdomain = $serverComponents[0];
@@ -886,7 +901,7 @@ function updateConfigForScoping($configArray) {
 		$configArray['Site']['title'] = $library->displayName;
 		//Update the facets file
 		if (strlen($library->facetFile) > 0 && $library->facetFile != 'default'){
-			$file = trim('../../conf/facets/' . $library->facetFile . '.ini');
+			$file = trim("../../sites/$servername/conf/facets/" . $library->facetFile . '.ini');
 			if (file_exists($file)) {
 				$configArray['Extra_Config']['facets'] = 'facets/' . $library->facetFile . '.ini';
 			}
@@ -894,7 +909,7 @@ function updateConfigForScoping($configArray) {
 		
 		//Update the searches file
 		if (strlen($library->searchesFile) > 0 && $library->searchesFile != 'default'){
-			$file = trim('../../conf/searches/' . $library->searchesFile . '.ini');
+			$file = trim("../../sites/$servername/conf/searches/" . $library->searchesFile . '.ini');
 			if (file_exists($file)) {
 				$configArray['Extra_Config']['searches'] = 'searches/' . $library->searchesFile . '.ini';
 			}

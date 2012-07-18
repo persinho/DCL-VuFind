@@ -18,7 +18,7 @@ function SendEContentSMS(id, to, provider, strings) {
 	sendAJAXSMS(url, params, strings);
 }
 
-function GetEContentHoldingsInfo(id, type) {
+function GetEContentHoldingsInfo(id, type, callback) {
 	var url = path + "/EcontentRecord/" + encodeURIComponent(id) + "/AJAX";
 	var params = "method=GetHoldingsInfo";
 	var fullUrl = url + "?" + params;
@@ -61,6 +61,12 @@ function GetEContentHoldingsInfo(id, type) {
 					$(".addToWishListLink").show();
 				}
 			}
+			
+			if (typeof callback === 'function')
+			{
+				callback();
+			}
+			
 		}
 	});
 }
@@ -169,3 +175,56 @@ function editItem(id, itemId){
 	ajaxLightbox(url+ "?" + params);
 	return false;
 }
+function showEcontentPurchaseOptions(id){
+	var url = path + "/EContentRecord/" + id + "/AJAX?method=getPurchaseOptions";
+	ajaxLightbox(url)
+}
+
+function GetEnrichmentInfoEContent(id, isbn, upc) {
+	var url = path + "/EcontentRecord/" + encodeURIComponent(id) + "/AJAX";
+	var params = "method=GetEnrichmentInfo&isbn=" + encodeURIComponent(isbn) + "&upc=" + encodeURIComponent(upc);
+	var fullUrl = url + "?" + params;
+	$.ajax( {
+		url : fullUrl,
+		success : function(data) {
+			var similarAuthorData = $(data).find("SimilarAuthors").text();
+			if (similarAuthorData) {
+				if (similarAuthorData.length > 0) {
+					$("#similarAuthorPlaceholder").html(similarAuthorData);
+					$("#similarAuthorsSidegroup").show();
+
+				}
+			}
+			var similarTitleData = $(data).find("SimilarTitles").text();
+			if (similarTitleData) {
+				if (similarTitleData.length > 0) {
+					$("#similarTitlePlaceholder").html(similarTitleData);
+					$("#relatedTitles").hide();
+					$("#similarTitles").show();
+					$("#similarTitlePlaceholder").show();
+					$("#similarTitlesSidegroup").show();
+				}
+			}
+			var seriesData = $(data).find("SeriesInfo").text();
+			if (seriesData && seriesData.length > 0) {
+				
+				seriesScroller = new TitleScroller('titleScrollerSeries', 'Series', 'seriesList');
+
+				seriesData = $.parseJSON(seriesData);
+				if (seriesData.titles.length > 0){
+					$('#list-series-tab').show();
+					$('#relatedTitleInfo').show();
+					seriesScroller.loadTitlesFromJsonData(seriesData);
+				}
+			}
+			var showGoDeeperData = $(data).find("ShowGoDeeperData").text();
+			if (showGoDeeperData) {
+				$('#goDeeperLink').show();
+			}
+		},
+		failure : function(jqXHR, textStatus, errorThrown) {
+		  alert('Error: Could Not Load Holdings information.  Please try again in a few minutes');
+	  }
+	});
+}
+

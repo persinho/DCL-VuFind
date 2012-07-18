@@ -64,8 +64,7 @@ class ReportPurchase extends Report{
 		$interface->assign('selectedDateEnd', $selectedDateEnd);
 
 		//////////Populate the Stores Filter
-		$queryStoresFilter = "SELECT DISTINCT store AS Store FROM purchaseLinkTracking
-				ORDER BY Store ASC";
+		$queryStoresFilter = "SELECT DISTINCT store AS Store FROM purchase_link_tracking ORDER BY Store ASC";
 		$resStoresFilter = mysql_query($queryStoresFilter);
 
 		$allStores = array();
@@ -81,7 +80,7 @@ class ReportPurchase extends Report{
 			$selectedStoresFilter = $_REQUEST['storesFilter'];
 		}else {
 			//Pre-Populate the Stores Filter MultiSelect list
-			$queryStoresPreSelect = "SELECT DISTINCT store AS Store FROM purchaseLinkTracking
+			$queryStoresPreSelect = "SELECT DISTINCT store AS Store FROM purchase_link_tracking
 				ORDER BY Store ASC";
 			$resStoresPreSelect = mysql_query($queryStoresPreSelect);
 
@@ -93,7 +92,7 @@ class ReportPurchase extends Report{
 		$interface->assign('selectedStoresFilter', $selectedStoresFilter);
 
 		$baseQueryPurchases = "SELECT COUNT(purchaseLinkId) AS Purchases, store AS Store ".
-				"FROM purchaseLinkTracking ".
+				"FROM purchase_link_tracking ".
 				"WHERE (DATE_FORMAT(trackingDate, '%Y-%m-%d')) BETWEEN '". $selectedDateStart . "' AND '". $selectedDateEnd . "' "; 
 		if (count($selectedStoresFilter) > 0) {
 			$stores = join("','",$selectedStoresFilter);
@@ -267,7 +266,7 @@ class ReportPurchase extends Report{
 			
 		//////////CHART
 		//Create the chart and load data into the results.
-		$queryDailyPurchases = "SELECT DATE_FORMAT(trackingDate, '%Y-%m-%d') as date, COUNT(recordId) AS Purchases, store AS Store FROM purchaseLinkTracking  ".
+		$queryDailyPurchases = "SELECT DATE_FORMAT(trackingDate, '%Y-%m-%d') as date, COUNT(recordId) AS Purchases, store AS Store FROM purchase_link_tracking  ".
 			"WHERE (DATE_FORMAT(trackingDate, '%Y-%m-%d')) BETWEEN '". $selectedDateStart . "' AND '". $selectedDateEnd . "' " ;	
 		if (count($selectedStoresFilter) > 0) {
 			$stores = join("','",$selectedStoresFilter);
@@ -330,7 +329,8 @@ class ReportPurchase extends Report{
 		$myPicture->drawLegend(80,20,array("Style"=>LEGEND_NOBORDER,"Mode"=>LEGEND_HORIZONTAL));
 
 		/* Render the picture (choose the best way) */
-		$chartHref = "/images/charts/dailyPurchases.png";
+		$time = time();
+		$chartHref = "/images/charts/dailyPurchases{$time}.png";
 		$chartPath = $configArray['Site']['local'] . $chartHref;
 		$myPicture->render($chartPath);
 		$interface->assign('chartPath', $chartHref);

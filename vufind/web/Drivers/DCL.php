@@ -328,12 +328,19 @@ class DCL extends Horizon {
         'yf'       => 'Ya Fiction',
         'ygn'      => 'Ya Graphic Novel',
         'ynf'      => 'Ya Non-fiction',
+		//Blue Ray		
+		'blufic'   => 'Blu-Ray Disc Adult Fiction',
+		'blujf'    => 'Blu-Ray Disc Juv Fiction',
+		'blujnf'   => 'Blu-Ray Disc Juv Non-Fiction',
+		'blunf'    => 'Blu-Ray Disc Ad Non-Fiction',
+		'bluyf'    => 'Blu-Ray Disc YA Fiction',
+				
 		);
 		return isset($collectionMap[$collectionCode]) ? $collectionMap[$collectionCode] : 'Unknown';
 	}
 	
 	public function translateStatus($statusCode){
-		$statusCode = strtolower($statusCode);
+		$statusCode = trim(strtolower($statusCode));
 		$statusMap = array(
         'a'        => 'Archived',
         'ao'       => 'Acquisitions on',
@@ -413,7 +420,7 @@ class DCL extends Horizon {
         'wsd'      => 'Waiting at Service',
         'xcdrm'    => 'No Holds'
         );
-        return isset($statusMap[$statusCode]) ? $statusMap[$statusCode] : 'Unknown (' . $statusCode . ')';
+        return isset($statusMap[$statusCode]) ? $statusMap[$statusCode] : 'Unknown';
 	}
 	
 	public function getLocationMapLink($locationCode){
@@ -432,79 +439,5 @@ class DCL extends Horizon {
         );
         return isset($locationMap[$locationCode]) ? $locationMap[$locationCode] : '' ;
 	}
-
-	public function getLibraryHours($locationId, $timeToCheck){
-		if (false && $this->useDb){
-			//TBD: Could use the database to get this, but it looks like the tables are not completely up to date.
-
-			//get the code for the location
-			$location = Location::staticGet('locationId', $locationId);
-
-			//query the database to determine when the library is open today
-			$query = "SELECT * FROM calendar_week where location = '{$location->code}' AND week_day = '{$dayOfWeek}'";
-			$calendarRs = $this->_query($query);
-			$calendarData = $this->_fetch_assoc($calendarRs);
-			//$libraryHours =
-
-		}else{
-			$holidays = array(
-        '01/01/2011',
-        '01/17/2011',
-        '02/21/2011',
-        '04/24/2011',
-        '05/30/2011',
-        '06/17/2011',
-        '07/04/2011',
-        '09/05/2011',
-        '11/24/2011',
-        '12/25/2011',
-        '01/01/2012',
-        '01/16/2012',
-			);
-			$todayFormatted = date('m/d/Y', $timeToCheck);
-			if (in_array($todayFormatted, $holidays)){
-				return array('closed' => true);
-			}
-			if ($locationId == 2){
-				//CastlePines
-				$libraryHours = array(
-				0 => array('open' => 12,'close' => 17,'openFormatted' => 'Noon','closeFormatted' => '5:00 PM'),
-				1 => array('open' => 9,'close' => 21,'openFormatted' => '9:00 AM','closeFormatted' => '9:00 PM'),
-				2 => array('open' => 9,'close' => 21,'openFormatted' => '9:00 AM','closeFormatted' => '9:00 PM'),
-				3 => array('open' => 9,'close' => 17,'openFormatted' => '9:00 AM','closeFormatted' => '5:00 PM'),
-				4 => array('open' => 9,'close' => 17,'openFormatted' => '9:00 AM','closeFormatted' => '5:00 PM'),
-				5 => array('open' => 9,'close' => 17,'openFormatted' => '9:00 AM','closeFormatted' => '5:00 PM'),
-				6 => array('open' => 9,'close' => 17,'openFormatted' => '9:00 AM','closeFormatted' => '5:00 PM'),
-				);
-			}elseif ($locationId == 5){
-				//Louviers
-				$libraryHours = array(
-				0 => array('closed' => true),
-				1 => array('closed' => true),
-				2 => array('open' => 15,'close' => 20,'openFormatted' => '3:00 PM','closeFormatted' => '8:00 PM'),
-				3 => array('closed' => true),
-				4 => array('closed' => true),
-				5 => array('closed' => true),
-				6 => array('open' => 9,'close' => 12,'openFormatted' => '9:00 AM','closeFormatted' => 'Noon'),
-				);
-			}else{
-				$libraryHours = array(
-				0 => array('open' => 12,'close' => 17,'openFormatted' => 'Noon','closeFormatted' => '5:00 PM'),
-				1 => array('open' => 9,'close' => 21,'openFormatted' => '9:00 AM','closeFormatted' => '9:00 PM'),
-				2 => array('open' => 9,'close' => 21,'openFormatted' => '9:00 AM','closeFormatted' => '9:00 PM'),
-				3 => array('open' => 9,'close' => 21,'openFormatted' => '9:00 AM','closeFormatted' => '9:00 PM'),
-				4 => array('open' => 9,'close' => 21,'openFormatted' => '9:00 AM','closeFormatted' => '9:00 PM'),
-				5 => array('open' => 9,'close' => 17,'openFormatted' => '9:00 AM','closeFormatted' => '5:00 PM'),
-				6 => array('open' => 9,'close' => 17,'openFormatted' => '9:00 AM','closeFormatted' => '5:00 PM'),
-				);
-			}
-			$dayOfWeekToday = strftime ('%w', $timeToCheck);
-			$selectedHours = $libraryHours[$dayOfWeekToday];
-
-			return $selectedHours;
-		}
-	}
-	
-
 }
 ?>

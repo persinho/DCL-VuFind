@@ -24,6 +24,9 @@
 	background-image: url(/interface/themes/dcl/images/searchbar-gradient.png);
 	background-repeat: repeat-x;
 }
+#searchbar #lookfor {
+	width: 275px;
+}
 #sidebar-wrapper{
 	border-right: 1px solid #5D8EAC;
 	display: inline-block;
@@ -90,4 +93,10 @@
 #materialsRequestPrefilterLimit{
 	font-weight: bold;
 	font-style: italic;
+}
+.searchcontent img.alignleft{
+margin: 10px 0 15px 50px;
+}
+.searchform #searchForm {
+margin: 25px 75px 0 0;
 }

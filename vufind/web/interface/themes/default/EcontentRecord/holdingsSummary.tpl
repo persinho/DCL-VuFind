@@ -11,7 +11,7 @@
 			{if strcasecmp($holdingsSummary.source, 'OverDrive') == 0}
 				Available for use from OverDrive.
 			{elseif $holdingsSummary.source == 'Freegal'}
-				Downoadable from Freegal.
+				Downloadable from Freegal.
 			{elseif $holdingsSummary.accessType == 'free'}
 				Available for multiple simultaneous usage. 
 			{elseif $holdingsSummary.onHold}
@@ -25,10 +25,15 @@
 					{$holdingsSummary.onOrderCopies} {if $holdingsSummary.onOrderCopies == 1}is{else}are{/if} on order. 
 				{/if}
 			{/if}
-			{if $holdingsSummary.numHolds >= 0}
+			{if $holdingsSummary.holdQueueLength >= 0}
 				<br/>{$holdingsSummary.holdQueueLength} {if $holdingsSummary.holdQueueLength == 1}person is{else}people are{/if} on the wait list.
 			{/if}
 		{/if} 
+		{if $showOtherEditionsPopup}
+		<div class="otherEditions">
+			<a href="#" onclick="loadOtherEditionSummaries('{$holdingsSummary.recordId}', true)">Other Formats and Languages</a>
+		</div>
+		{/if}
 	</div>
      
  </div>

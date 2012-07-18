@@ -53,6 +53,16 @@
 	color: #00125E;
 	font-size: 12px;
 	font-weight: bold;
+	height: 15px;
+}
+.titleScrollerHeader .linkTab
+{
+	padding-right: 10px;
+	float: left;
+}
+.titleScrollerHeader .linkTab .first
+{
+	padding-right: 0px;
 }
 
 #listSelection{
@@ -63,6 +73,7 @@
 
 .titleScrollerBody{
 	background-color: white;
+	clear: both;
 }
 
 .leftScrollerButton{
@@ -146,4 +157,25 @@
 .listWidgetSelector{
 	width: 100%;
 	text-align: right;
+}
+
+.singleTitleWidget {
+	width: 200px;
+}
+.singleTitleWidget .scrollerTitle img{
+	display: inline-block;
+	opacity: 1;
+}
+.singleTitleWidget .scrollerTitle.selected img{
+	display: inline-block;
+}
+.singleTitleWidget .scrollerTitle.selected{
+	border: 0px solid black;
+	border-radius: 3px;
+	padding: 0px;
+}
+.singleTitleWidget .scrollerBodyContainer{
+	margin: 5px 0px;
+	text-align: center;
+	width: 100%;
 }

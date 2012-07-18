@@ -51,7 +51,7 @@ if (empty($timer)){
 
 // Connect to Memcache:
 $memcache = new Memcache();
-if (!$memcache->connect($host, $port, $timeout)) {
+if (!$memcache->pconnect($host, $port, $timeout)) {
 	PEAR::raiseError(new PEAR_Error("Could not connect to Memcache (host = {$host}, port = {$port})."));
 }
 $timer->logTime("Initialize Memcache");
@@ -212,7 +212,7 @@ if ($configArray['EContent']['library'] && isset($_GET['econtent']) && isset($id
 						exit();
 					}
 				}else{
-					$logger->log("Did not find econtent file $filename");
+					$logger->log("Did not find econtent cover file $filename", PEAR_LOG_ERROR);
 				}
 			}
 		}

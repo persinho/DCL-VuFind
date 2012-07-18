@@ -34,6 +34,12 @@ class Profile extends MyResearch
 
 			header("Location: " . $configArray['Site']['url'] . '/MyResearch/Profile');
 			exit();
+		}elseif (isset($_POST['updatePin'])) {
+			$result = $this->catalog->updatePin();
+			$_SESSION['profileUpdateErrors'] = $result;
+
+			header("Location: " . $configArray['Site']['url'] . '/MyResearch/Profile');
+			exit();
 		}else if (isset($_POST['edit'])){
 			$interface->assign('edit', true);
 		}else{
@@ -64,13 +70,15 @@ class Profile extends MyResearch
 		}
 		$interface->assign('locationList', $locationList);
 		
-		require_once('Drivers/Marmot.php');
-		$marmotDriver = new Marmot();
-		$userIsStaff = $marmotDriver->isUserStaff();
-		$interface->assign('userIsStaff', $userIsStaff);
+		if ($this->catalog->checkFunction('isUserStaff')){
+			$userIsStaff = $this->catalog->isUserStaff();
+			$interface->assign('userIsStaff', $userIsStaff);
+		}else{
+			$interface->assign('userIsStaff', false);
+		}
 
 		$interface->setTemplate('profile.tpl');
-		$interface->setPageTitle('My Profile');
+		$interface->setPageTitle(translate('My Profile'));
 		$interface->display('layout.tpl');
 	}
 
